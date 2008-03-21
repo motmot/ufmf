@@ -331,15 +331,25 @@ class UfmfSaver:
 
             xmax = xmin + 2*self.image_radius
             xmax = min( xmax, self.width)
+            if xmax == self.width:
+                xmin = self.width - (2*self.image_radius)
         
             ymin = int(round(yidx-self.image_radius))
             ymin = max(0,ymin)
 
             ymax = ymin + 2*self.image_radius
             ymax = min( ymax, self.width)
+            if ymax == self.height:
+                ymin = self.height - (2*self.image_radius)
 
-            assert ymax-ymin == (2*self.image_radius)
-            assert xmax-xmin == (2*self.image_radius)
+            try:
+                assert ymax-ymin == (2*self.image_radius)
+                assert xmax-xmin == (2*self.image_radius)
+            except:
+                print 'xmin, xidx, xmax',xmin, xidx, xmax
+                print 'ymin, yidx, ymax',ymin, yidx, ymax
+                print 'self.image_radius',self.image_radius
+                raise
 
             roi = origframe[ ymin:ymax, xmin:xmax ]
             this_str_buf = roi.tostring()
