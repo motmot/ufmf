@@ -14,7 +14,7 @@ import math
 
 # version 1 formats:
 HEADER_FMT = '<IIdII'
-CHUNKHEADER_FMT = '<II'
+CHUNKHEADER_FMT = '<dI'
 SUBHEADER_FMT = '<II'
 TIMESTAMP_FMT = 'd' # XXX struct.pack('<d',nan) dies
 
