@@ -231,6 +231,52 @@ class InvalidMovieFileException( Exception ):
 ##         fno = nz[-1]
 ##         return self.get_frame(fno)
 
+class UfmfParser(object):
+    def parse(self,filename):
+        mode = "rb"
+        fd = open(filename,mode=mode)
+
+        bufsz = struct.calcsize(HEADER_FMT)
+        buf = fd.read( bufsz )
+        intup = struct.unpack(HEADER_FMT, buf)
+        (version, image_radius,
+         timestamp0,
+         width, height) = intup
+
+        # extract background
+        bg_im_buf = fd.read( width*height)
+        bg_im = numpy.fromstring( bg_im_buf, dtype=numpy.uint8)
+        bg_im.shape = height, width
+        self.handle_bg(timestamp0, bg_im)
+
+        # extract frames
+        chunkheadsz = struct.calcsize( CHUNKHEADER_FMT )
+        subsz = struct.calcsize(SUBHEADER_FMT)
+
+        chunkwidth = 2*image_radius
+        chunkheight = 2*image_radius
+        chunkimsize = chunkwidth*chunkheight
+        while 1:
+            buf = fd.read( chunkheadsz )
+            if not len(buf):
+                # no more frames (EOF)
+                break
+            intup = struct.unpack(CHUNKHEADER_FMT, buf)
+            (timestamp, n_pts) = intup
+            regions = []
+            for ptnum in range(n_pts):
+                subbuf = fd.read(subsz)
+                intup = struct.unpack(SUBHEADER_FMT, subbuf)
+                xmin, ymin = intup
+
+                buf = fd.read( chunkimsize )
+                bufim = numpy.fromstring( buf, dtype = numpy.uint8 )
+                bufim.shape = chunkheight, chunkwidth
+                regions.append( (xmin,ymin, bufim) )
+
+            self.handle_frame(timestamp, regions)
+        fd.close()
+
 class Ufmf:
     def __init__(self,filename):
         mode = "rb"
@@ -242,7 +288,7 @@ class Ufmf:
         (self.version, self.image_radius,
          self.timestamp0,
          self.width, self.height) = intup
-        
+
         print '(self.version, self.image_radius, self.timestamp0, self.width, self.height)',(self.version, self.image_radius, self.timestamp0, self.width, self.height)
 
         bg_im_buf = self.file.read( self.width*self.height)
@@ -255,7 +301,7 @@ class Ufmf:
 
     def close(self):
         self.file.close()
-        
+
     def _dump_frames(self):
         chunkheadsz = struct.calcsize( CHUNKHEADER_FMT )
         subsz = struct.calcsize(SUBHEADER_FMT)
@@ -278,7 +324,7 @@ class Ufmf:
                 xmin, ymin = intup
 
                 print 'xmin,ymin',xmin,ymin
-                
+
                 buf = self.file.read( chunkimsize )
                 bufim = numpy.fromstring( buf, dtype = numpy.uint8 )
                 bufim.shape = chunkheight, chunkwidth
@@ -305,7 +351,7 @@ class UfmfSaver:
         self.height, self.width = bg_frame.shape
         assert bg_frame.dtype == numpy.uint8
         self.timestamp0 = timestamp0
-        
+
         self.file.write(struct.pack(HEADER_FMT,
                                     self.version, self.image_radius,
                                     self.timestamp0,
@@ -314,12 +360,12 @@ class UfmfSaver:
         assert len(bg_data)==self.height*self.width
         self.file.write(bg_data)
         self.last_timestamp = self.timestamp0
-        
+
     def add_frame(self,origframe,timestamp,point_data):
         origframe = numpy.asarray( origframe )
-        
+
         assert origframe.shape == (self.height, self.width)
-        
+
         n_pts = len(point_data)
         self.file.write(struct.pack(CHUNKHEADER_FMT, timestamp, n_pts ))
         str_buf = []
@@ -333,7 +379,7 @@ class UfmfSaver:
             xmax = min( xmax, self.width)
             if xmax == self.width:
                 xmin = self.width - (2*self.image_radius)
-        
+
             ymin = int(round(yidx-self.image_radius))
             ymin = max(0,ymin)
 
@@ -354,13 +400,13 @@ class UfmfSaver:
             roi = origframe[ ymin:ymax, xmin:xmax ]
             this_str_buf = roi.tostring()
             this_str_head = struct.pack(SUBHEADER_FMT, xmin, ymin)
-            
+
             str_buf.append( this_str_head + this_str_buf )
         fullstr = ''.join(str_buf)
         if len(fullstr):
             self.file.write(fullstr)
         self.last_timestamp = timestamp
-            
+
     def close(self):
         self.file.close()
         if self.timestamp0 is not None:
