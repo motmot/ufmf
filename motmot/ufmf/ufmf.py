@@ -233,29 +233,11 @@ class InvalidMovieFileException( Exception ):
 
 class UfmfParser(object):
     def parse(self,filename):
-        mode = "rb"
-        fd = open(filename,mode=mode)
+        ufmf = Ufmf(filename)
+        bg_im, timestamp0 = ufmf.get_bg_image()
 
-        bufsz = struct.calcsize(HEADER_FMT)
-        buf = fd.read( bufsz )
-        intup = struct.unpack(HEADER_FMT, buf)
-        (version, image_radius,
-         timestamp0,
-         width, height) = intup
-
-        # extract background
-        bg_im_buf = fd.read( width*height)
-        bg_im = numpy.fromstring( bg_im_buf, dtype=numpy.uint8)
-        bg_im.shape = height, width
         self.handle_bg(timestamp0, bg_im)
 
-        # extract frames
-        chunkheadsz = struct.calcsize( CHUNKHEADER_FMT )
-        subsz = struct.calcsize(SUBHEADER_FMT)
-
-        chunkwidth = 2*image_radius
-        chunkheight = 2*image_radius
-        chunkimsize = chunkwidth*chunkheight
         while 1:
             buf = fd.read( chunkheadsz )
             if not len(buf):
@@ -277,62 +259,141 @@ class UfmfParser(object):
             self.handle_frame(timestamp, regions)
         fd.close()
 
-class Ufmf:
-    def __init__(self,filename):
+class Ufmf(object):
+    bufsz = struct.calcsize(HEADER_FMT)
+    chunkheadsz = struct.calcsize( CHUNKHEADER_FMT )
+    subsz = struct.calcsize(SUBHEADER_FMT)
+
+    def __init__(self,filename, seek_ok=True):
         mode = "rb"
-        self.file = open(filename,mode=mode)
-
-        bufsz = struct.calcsize(HEADER_FMT)
-        buf = self.file.read( bufsz )
+        self._filename = filename
+        self._fd = open(filename,mode=mode)
+        buf = self._fd.read( self.bufsz )
         intup = struct.unpack(HEADER_FMT, buf)
-        (self.version, self.image_radius,
-         self.timestamp0,
-         self.width, self.height) = intup
+        (self._version, self._image_radius,
+         self._timestamp0,
+         self._width, self._height) = intup
+        # extract background
+        bg_im_buf = self._fd.read( self._width*self._height)
+        self._bg_im = numpy.fromstring( bg_im_buf, dtype=numpy.uint8)
+        self._bg_im.shape = self._height, self._width
+        if hasattr(self,'handle_bg'):
+            self.handle_bg(self._timestamp0, self._bg_im)
 
-        print '(self.version, self.image_radius, self.timestamp0, self.width, self.height)',(self.version, self.image_radius, self.timestamp0, self.width, self.height)
+        # get ready to extract frames
+        self._chunkwidth = 2*self._image_radius
+        self._chunkheight = 2*self._image_radius
+        self._chunkshape = self._chunkheight, self._chunkwidth
+        self._chunkimsize = self._chunkwidth*self._chunkheight
+        self._last_safe_x = self._width - self._chunkwidth
+        self._last_safe_y = self._height - self._chunkheight
+        if seek_ok:
+            self._fd_start = self._fd.tell()
+            self._fd.seek(0,2)
+            self._fd_end = self._fd.tell()
+            self._fd.seek(self._fd_start,0)
+            self._fd_length = self._fd_end - self._fd_start
+        else:
+            self._fd_length = None
 
-        bg_im_buf = self.file.read( self.width*self.height)
-        bg_im = numpy.fromstring( bg_im_buf, dtype=numpy.uint8)
-        bg_im.shape = self.height, self.width
-        self.bg_im = bg_im
+    def get_bg_image(self):
+        return self._bg_im, self._timestamp0
 
-    def get_full_image(self):
-        return self.bg_im
+    def get_progress(self):
+        dist = self._fd.tell()-self._fd_start
+        return dist/self._fd_length
 
-    def close(self):
-        self.file.close()
-
-    def _dump_frames(self):
-        chunkheadsz = struct.calcsize( CHUNKHEADER_FMT )
-        subsz = struct.calcsize(SUBHEADER_FMT)
-
-        chunkwidth = 2*self.image_radius
-        chunkheight = 2*self.image_radius
-        chunkimsize = chunkwidth*chunkheight
+    def readframes(self):
+        cnt=0
         while 1:
-            buf = self.file.read( chunkheadsz )
+            buf = self._fd.read( self.chunkheadsz )
+            cnt+=1
             if not len(buf):
                 # no more frames (EOF)
                 break
             intup = struct.unpack(CHUNKHEADER_FMT, buf)
             (timestamp, n_pts) = intup
-            print '*'*80
-            print 'timestamp, n_pts',timestamp, n_pts
+
+            regions = []
             for ptnum in range(n_pts):
-                subbuf = self.file.read(subsz)
+                subbuf = self._fd.read(self.subsz)
                 intup = struct.unpack(SUBHEADER_FMT, subbuf)
                 xmin, ymin = intup
 
-                print 'xmin,ymin',xmin,ymin
-
-                buf = self.file.read( chunkimsize )
+                if (xmin < self._last_safe_x and
+                    ymin < self._last_safe_y):
+                    read_length = self._chunkimsize
+                    bufshape = self._chunkshape
+                else:
+                    chunkwidth = min(self._width - xmin, self._chunkwidth)
+                    chunkheight = min(self._height - ymin, self._chunkheight)
+                    read_length = chunkwidth*chunkheight
+                    bufshape = chunkheight,chunkwidth
+                buf = self._fd.read( read_length )
                 bufim = numpy.fromstring( buf, dtype = numpy.uint8 )
-                bufim.shape = chunkheight, chunkwidth
-                print 'bufim'
-                print bufim
-                print
-            print
-            print
+                bufim.shape = bufshape
+                regions.append( (xmin,ymin, bufim) )
+            yield timestamp, regions
+
+    def close(self):
+        self._fd.close()
+
+## class UfmfOld:
+##     def __init__(self,filename):
+##         mode = "rb"
+##         self.file = open(filename,mode=mode)
+
+##         bufsz = struct.calcsize(HEADER_FMT)
+##         buf = self.file.read( bufsz )
+##         intup = struct.unpack(HEADER_FMT, buf)
+##         (self.version, self.image_radius,
+##          self.timestamp0,
+##          self.width, self.height) = intup
+
+##         print '(self.version, self.image_radius, self.timestamp0, self.width, self.height)',(self.version, self.image_radius, self.timestamp0, self.width, self.height)
+
+##         bg_im_buf = self.file.read( self.width*self.height)
+##         bg_im = numpy.fromstring( bg_im_buf, dtype=numpy.uint8)
+##         bg_im.shape = self.height, self.width
+##         self.bg_im = bg_im
+
+##     def get_full_image(self):
+##         return self.bg_im
+
+##     def close(self):
+##         self.file.close()
+
+##     def _dump_frames(self):
+##         chunkheadsz = struct.calcsize( CHUNKHEADER_FMT )
+##         subsz = struct.calcsize(SUBHEADER_FMT)
+
+##         chunkwidth = 2*self.image_radius
+##         chunkheight = 2*self.image_radius
+##         chunkimsize = chunkwidth*chunkheight
+##         while 1:
+##             buf = self.file.read( chunkheadsz )
+##             if not len(buf):
+##                 # no more frames (EOF)
+##                 break
+##             intup = struct.unpack(CHUNKHEADER_FMT, buf)
+##             (timestamp, n_pts) = intup
+##             print '*'*80
+##             print 'timestamp, n_pts',timestamp, n_pts
+##             for ptnum in range(n_pts):
+##                 subbuf = self.file.read(subsz)
+##                 intup = struct.unpack(SUBHEADER_FMT, subbuf)
+##                 xmin, ymin = intup
+
+##                 print 'xmin,ymin',xmin,ymin
+
+##                 buf = self.file.read( chunkimsize )
+##                 bufim = numpy.fromstring( buf, dtype = numpy.uint8 )
+##                 bufim.shape = chunkheight, chunkwidth
+##                 print 'bufim'
+##                 print bufim
+##                 print
+##             print
+##             print
 
 class UfmfSaver:
     def __init__(self,
@@ -409,11 +470,6 @@ class UfmfSaver:
 
     def close(self):
         self.file.close()
-        if self.timestamp0 is not None:
-            # don't print twice
-            dur = self.last_timestamp - self.timestamp0
-            print 'saved %.1f seconds of small data'%(dur,)
-            self.timestamp0 = None
 
     def __del__(self):
         if hasattr(self,'file'):
