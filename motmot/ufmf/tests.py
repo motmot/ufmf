@@ -99,6 +99,7 @@ class TestUfmf(unittest.TestCase):
 
         test_timestamp = 2
         for i, (timestamp, regions) in enumerate(us2.readframes()):
+            progress = us2.get_progress()
             test_ll_pts = ll_pts[i]
             assert timestamp == test_timestamp
             test_timestamp += 1

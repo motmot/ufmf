@@ -108,6 +108,9 @@ class Ufmf(object):
 
     def get_progress(self):
         """get a fraction of completeness (approximate value)"""
+        if self._fd_length is None:
+            # seek_ok was false - don't know how long this is
+            return 0.0
         dist = self._fd.tell()-self._fd_start
         return dist/self._fd_length
 
