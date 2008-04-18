@@ -114,6 +114,12 @@ class Ufmf(object):
         dist = self._fd.tell()-self._fd_start
         return dist/self._fd_length
 
+    def tell(self):
+        return self._fd.tell()
+
+    def seek(self,loc):
+        self._fd.seek(loc)
+
     def readframes(self):
         """return a generator of the frame information"""
         cnt=0
@@ -149,6 +155,48 @@ class Ufmf(object):
 
     def close(self):
         self._fd.close()
+
+class FlyMovieEmulator(object):
+    def __init__(self,filename):
+        self._ufmf = Ufmf(filename)
+        self._start = self._ufmf.tell()
+        self._fno2loc = None
+        self._timestamps = None
+        self.format = 'MONO8' # by definition
+    def get_all_timestamps(self):
+        if self._timestamps is None:
+            self._fill_timestamps_and_locs()
+        return self._timestamps
+    def seek(self,fno):
+        loc = self._fno2loc[fno]
+        self._ufmf.seek(loc)
+    def get_next_frame(self):
+        # TODO - make running accumulation of previous frames
+        bg,ts0=self._ufmf.get_bg_image()
+        this_frame = numpy.array(bg,copy=True)
+        for timestamp, regions in self._ufmf.readframes():
+            for xmin,ymin,bufim in regions:
+                h,w=bufim.shape
+                this_frame[ymin:ymin+h, xmin:xmin+w] = bufim
+            break # only want 1 frame
+        return this_frame, timestamp
+    def _fill_timestamps_and_locs(self):
+        assert self._fno2loc is None
+        assert self._timestamps is None
+
+        self._timestamps = []
+        self._fno2loc = []
+        self._fno2loc.append( self._ufmf.tell() )
+        for timestamp, regions in self._ufmf.readframes():
+            self._timestamps.append( timestamp )
+            self._fno2loc.append( self._ufmf.tell() )
+        del self._fno2loc[-1] # remove last entry -- it's at end of file
+    def get_height(self):
+        bg,ts0=self._ufmf.get_bg_image()
+        return bg.shape[0]
+    def get_width(self):
+        bg,ts0=self._ufmf.get_bg_image()
+        return bg.shape[1]
 
 class UfmfSaver:
     """class to write (save) .ufmf files"""
