@@ -45,7 +45,13 @@ class TestUfmf(unittest.TestCase):
         assert test_timestamp1 == timestamp1
         us2.close()
 
-    def test_b(self):
+    def test_b_seek(self):
+        self._do_test_b( True )
+
+    def test_b_no_seek(self):
+        self._do_test_b( False )
+
+    def _do_test_b(self,seek_ok):
         w = 752
         h = 240
 
@@ -86,7 +92,7 @@ class TestUfmf(unittest.TestCase):
             us.add_frame( frame2, timestamp, pts )
         us.close()
 
-        us2 = ufmf.Ufmf(filename)
+        us2 = ufmf.Ufmf(filename,seek_ok=seek_ok)
         test_frame1, test_timestamp1 = us2.get_bg_image()
         assert numpy.allclose( test_frame1, frame1 )
         assert test_timestamp1 == 1
