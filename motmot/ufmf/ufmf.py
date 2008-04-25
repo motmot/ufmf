@@ -1,4 +1,3 @@
-#FlyMovieFormat
 from __future__ import division
 import sys
 import struct
@@ -18,7 +17,6 @@ CHUNKHEADER_FMT = '<dI'
 SUBHEADER_FMT = '<II'
 TIMESTAMP_FMT = 'd' # XXX struct.pack('<d',nan) dies
 
-
 class NoMoreFramesException( Exception ):
     pass
 
@@ -36,7 +34,6 @@ class UfmfParser(object):
     def handle_frame(self, timestamp, regions):
         pass
     """
-
     def parse(self,filename):
         ufmf = Ufmf(filename)
         bg_im, timestamp0 = ufmf.get_bg_image()
@@ -45,7 +42,7 @@ class UfmfParser(object):
 
         while 1:
             buf = fd.read( chunkheadsz )
-            if not len(buf):
+            if len(buf)!=chunkheadsz:
                 # no more frames (EOF)
                 break
             intup = struct.unpack(CHUNKHEADER_FMT, buf)
@@ -126,7 +123,7 @@ class Ufmf(object):
         while 1:
             buf = self._fd.read( self.chunkheadsz )
             cnt+=1
-            if not len(buf):
+            if len(buf)!=self.chunkheadsz:
                 # no more frames (EOF)
                 break
             intup = struct.unpack(CHUNKHEADER_FMT, buf)
@@ -163,6 +160,7 @@ class FlyMovieEmulator(object):
         self._fno2loc = None
         self._timestamps = None
         self.format = 'MONO8' # by definition
+        self._last_frame = None
     def get_all_timestamps(self):
         if self._timestamps is None:
             self._fill_timestamps_and_locs()
@@ -170,27 +168,32 @@ class FlyMovieEmulator(object):
     def seek(self,fno):
         loc = self._fno2loc[fno]
         self._ufmf.seek(loc)
+        self._last_frame = None
     def get_next_frame(self):
         # TODO - make running accumulation of previous frames
         bg,ts0=self._ufmf.get_bg_image()
-        this_frame = numpy.array(bg,copy=True)
+        if self._last_frame is None:
+            self._last_frame = numpy.array(bg,copy=True)
         for timestamp, regions in self._ufmf.readframes():
             for xmin,ymin,bufim in regions:
                 h,w=bufim.shape
-                this_frame[ymin:ymin+h, xmin:xmin+w] = bufim
+                self._last_frame[ymin:ymin+h, xmin:xmin+w] = bufim
             break # only want 1 frame
-        return this_frame, timestamp
+        return self._last_frame, timestamp
     def _fill_timestamps_and_locs(self):
         assert self._fno2loc is None
         assert self._timestamps is None
 
         self._timestamps = []
         self._fno2loc = []
-        self._fno2loc.append( self._ufmf.tell() )
+        start_pos = self._ufmf.tell()
+        self._fno2loc.append( start_pos )
         for timestamp, regions in self._ufmf.readframes():
             self._timestamps.append( timestamp )
             self._fno2loc.append( self._ufmf.tell() )
-        del self._fno2loc[-1] # remove last entry -- it's at end of file
+        del self._fno2loc[-1] # removee last entry -- it's at end of file
+        self._ufmf.seek( start_pos )
+        
     def get_height(self):
         bg,ts0=self._ufmf.get_bg_image()
         return bg.shape[0]
