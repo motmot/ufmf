@@ -10,4 +10,8 @@ setup(name='motmot.ufmf',
       author_email='strawman@astraw.com',
       namespace_packages = ['motmot'],
       packages = find_packages(),
+      entry_points = {
+    'console_scripts': ['ufmf2fmf = motmot.ufmf.ufmf2fmf:main',
+                        ],
+    }
       )
