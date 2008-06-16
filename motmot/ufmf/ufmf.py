@@ -161,6 +161,10 @@ class FlyMovieEmulator(object):
         self._timestamps = None
         self.format = 'MONO8' # by definition
         self._last_frame = None
+    def get_format(self):
+        return self.format
+    def get_bits_per_pixel(self):
+        return 8
     def get_all_timestamps(self):
         if self._timestamps is None:
             self._fill_timestamps_and_locs()
@@ -170,15 +174,18 @@ class FlyMovieEmulator(object):
         self._ufmf.seek(loc)
         self._last_frame = None
     def get_next_frame(self):
-        # TODO - make running accumulation of previous frames
         bg,ts0=self._ufmf.get_bg_image()
         if self._last_frame is None:
             self._last_frame = numpy.array(bg,copy=True)
+        have_frame = False
         for timestamp, regions in self._ufmf.readframes():
+            have_frame = True
             for xmin,ymin,bufim in regions:
                 h,w=bufim.shape
                 self._last_frame[ymin:ymin+h, xmin:xmin+w] = bufim
             break # only want 1 frame
+        if not have_frame:
+            raise NoMoreFramesException('EOF')
         return self._last_frame, timestamp
     def _fill_timestamps_and_locs(self):
         assert self._fno2loc is None
@@ -193,7 +200,7 @@ class FlyMovieEmulator(object):
             self._fno2loc.append( self._ufmf.tell() )
         del self._fno2loc[-1] # removee last entry -- it's at end of file
         self._ufmf.seek( start_pos )
-        
+
     def get_height(self):
         bg,ts0=self._ufmf.get_bg_image()
         return bg.shape[0]

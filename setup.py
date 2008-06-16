@@ -12,6 +12,7 @@ setup(name='motmot.ufmf',
       packages = find_packages(),
       entry_points = {
     'console_scripts': ['ufmf2fmf = motmot.ufmf.ufmf2fmf:main',
+                        'ufmfcat = motmot.ufmf.ufmfcat:main',
                         ],
     }
       )
