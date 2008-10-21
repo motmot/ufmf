@@ -1,0 +1,1 @@
+video/ufmf; /usr/bin/playufmf %s; test=test -n "$DISPLAY"; description=ufmf

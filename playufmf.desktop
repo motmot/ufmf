@@ -1,0 +1,10 @@
+[Desktop Entry]
+Encoding=UTF-8
+Name=playufmf
+MimeType=video/ufmf
+Exec=/usr/bin/playufmf %f
+Type=Application
+Categories=GNOME;GTK;Application;AudioVideo;
+Comment=View UFMF Files
+Icon=gnobots2.xpm
+NoDisplay=true
