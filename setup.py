@@ -13,6 +13,7 @@ setup(name='motmot.ufmf',
       entry_points = {
     'console_scripts': ['ufmf2fmf = motmot.ufmf.ufmf2fmf:main',
                         'ufmfcat = motmot.ufmf.ufmfcat:main',
+                        'playufmf = motmot.ufmf.playufmf:main',
                         ],
     }
       )

@@ -153,6 +153,9 @@ class Ufmf(object):
     def close(self):
         self._fd.close()
 
+class NoSuchFrameError(IndexError):
+    pass
+
 class FlyMovieEmulator(object):
     def __init__(self,filename):
         self._ufmf = Ufmf(filename)
@@ -161,18 +164,38 @@ class FlyMovieEmulator(object):
         self._timestamps = None
         self.format = 'MONO8' # by definition
         self._last_frame = None
+        self.filename = filename
+
+    def get_n_frames(self):
+        self._fill_timestamps_and_locs()
+        last_frame = len(self._fno2loc)
+        return last_frame+1
+
     def get_format(self):
         return self.format
     def get_bits_per_pixel(self):
         return 8
     def get_all_timestamps(self):
-        if self._timestamps is None:
-            self._fill_timestamps_and_locs()
+        self._fill_timestamps_and_locs()
         return self._timestamps
+    def get_frame(self,fno,allow_partial_frames=False):
+        if allow_partial_frames:
+            warnings.warn('unsupported argument "allow_partial_frames" ignored')
+        try:
+            self.seek(fno)
+        except NoSuchFrameError, err:
+            return self._ufmf.get_bg_image()
+        else:
+            return self.get_next_frame()
+
     def seek(self,fno):
-        loc = self._fno2loc[fno]
-        self._ufmf.seek(loc)
-        self._last_frame = None
+        if 0<= fno < len(self._fno2loc):
+            loc = self._fno2loc[fno]
+            self._ufmf.seek(loc)
+            self._last_frame = None
+        else:
+            raise NoSuchFrameError('fno %d not in .ufmf file'%fno)
+
     def get_next_frame(self):
         bg,ts0=self._ufmf.get_bg_image()
         if self._last_frame is None:
@@ -188,8 +211,10 @@ class FlyMovieEmulator(object):
             raise NoMoreFramesException('EOF')
         return self._last_frame, timestamp
     def _fill_timestamps_and_locs(self):
+        if self._timestamps is not None:
+            # already did this
+            return
         assert self._fno2loc is None
-        assert self._timestamps is None
 
         self._timestamps = []
         self._fno2loc = []
@@ -198,7 +223,7 @@ class FlyMovieEmulator(object):
         for timestamp, regions in self._ufmf.readframes():
             self._timestamps.append( timestamp )
             self._fno2loc.append( self._ufmf.tell() )
-        del self._fno2loc[-1] # removee last entry -- it's at end of file
+        del self._fno2loc[-1] # remove last entry -- it's at end of file
         self._ufmf.seek( start_pos )
 
     def get_height(self):
