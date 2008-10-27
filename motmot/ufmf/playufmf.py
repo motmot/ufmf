@@ -7,6 +7,11 @@ def main():
     usage = '%prog FILE [options]'
 
     parser = OptionParser(usage)
+
+    parser.add_option("--darken", type='int',default=0,
+                      help="show saved regions as darker by this amount",
+                      default=False)
+
     (options, args) = parser.parse_args()
 
     if len(args)<1:
@@ -21,7 +26,7 @@ def main():
     else:
         kws = {}
     app = playfmf.MyApp(**kws)
-    flymovie = ufmf.FlyMovieEmulator(filename)
+    flymovie = ufmf.FlyMovieEmulator(filename,darken=options.darken)
     app.OnNewMovie(flymovie)
     app.MainLoop()
 
