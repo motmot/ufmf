@@ -180,7 +180,9 @@ class NoSuchFrameError(IndexError):
     pass
 
 class FlyMovieEmulator(object):
-    def __init__(self,filename,darken=0):
+    def __init__(self,filename,
+                 darken=0,
+                 allow_no_such_frame_errors=False):
         self._ufmf = Ufmf(filename)
         self._start = self._ufmf.tell()
         self._fno2loc = None
@@ -190,6 +192,7 @@ class FlyMovieEmulator(object):
         self.filename = filename
         self._bg0,self._ts0=self._ufmf.get_bg_image()
         self._darken=darken
+        self._allow_no_such_frame_errors = allow_no_such_frame_errors
 
     def get_n_frames(self):
         self._fill_timestamps_and_locs()
@@ -209,7 +212,10 @@ class FlyMovieEmulator(object):
         try:
             self.seek(fno)
         except NoSuchFrameError, err:
-            return self._bg0,self._ts0 # just return first background image
+            if self._allow_no_such_frame_errors:
+                raise
+            else:
+                return self._bg0,self._ts0 # just return first background image
         else:
             return self.get_next_frame()
 
