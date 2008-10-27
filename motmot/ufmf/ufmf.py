@@ -5,11 +5,14 @@ import warnings
 import os.path
 
 import numpy
+import numpy as np
 from numpy import nan
 
 import time
 
 import math
+
+import motmot.FlyMovieFormat.FlyMovieFormat as FMF
 
 # version 1 formats:
 HEADER_FMT = '<IIdII'
@@ -67,7 +70,9 @@ class Ufmf(object):
     chunkheadsz = struct.calcsize( CHUNKHEADER_FMT )
     subsz = struct.calcsize(SUBHEADER_FMT)
 
-    def __init__(self,filename, seek_ok=True):
+    def __init__(self,filename,
+                 seek_ok=True,
+                 use_conventional_named_mean_fmf=True):
         mode = "rb"
         self._filename = filename
         self._fd = open(filename,mode=mode)
@@ -98,6 +103,24 @@ class Ufmf(object):
             self._fd_length = self._fd_end - self._fd_start
         else:
             self._fd_length = None
+
+        self.use_conventional_named_mean_fmf = use_conventional_named_mean_fmf
+        if self.use_conventional_named_mean_fmf:
+            basename = os.path.splitext(self._filename)[0]
+            fmf_filename = basename + '_mean.fmf'
+            if os.path.exists(fmf_filename):
+                self._mean_fmf = FMF.FlyMovie(fmf_filename)
+                self._mean_fmf_timestamps = self._mean_fmf.get_all_timestamps()
+                dt=self._mean_fmf_timestamps[1:]-self._mean_fmf_timestamps[:-1]
+                assert np.all(dt > 0) # make sure searchsorted will work
+            else:
+                self.use_conventional_named_mean_fmf = False
+
+    def get_mean_for_timestamp(self, timestamp ):
+        fno=np.searchsorted(self._mean_fmf_timestamps,timestamp,side='right')-1
+        mean_image, timestamp_mean = self._mean_fmf.get_frame(fno)
+        assert timestamp_mean <= timestamp
+        return mean_image
 
     def get_bg_image(self):
         """return the background image"""
@@ -157,7 +180,7 @@ class NoSuchFrameError(IndexError):
     pass
 
 class FlyMovieEmulator(object):
-    def __init__(self,filename):
+    def __init__(self,filename,darken=0):
         self._ufmf = Ufmf(filename)
         self._start = self._ufmf.tell()
         self._fno2loc = None
@@ -165,6 +188,8 @@ class FlyMovieEmulator(object):
         self.format = 'MONO8' # by definition
         self._last_frame = None
         self.filename = filename
+        self._bg0,self._ts0=self._ufmf.get_bg_image()
+        self._darken=darken
 
     def get_n_frames(self):
         self._fill_timestamps_and_locs()
@@ -184,7 +209,7 @@ class FlyMovieEmulator(object):
         try:
             self.seek(fno)
         except NoSuchFrameError, err:
-            return self._ufmf.get_bg_image()
+            return self._bg0,self._ts0 # just return first background image
         else:
             return self.get_next_frame()
 
@@ -197,15 +222,17 @@ class FlyMovieEmulator(object):
             raise NoSuchFrameError('fno %d not in .ufmf file'%fno)
 
     def get_next_frame(self):
-        bg,ts0=self._ufmf.get_bg_image()
-        if self._last_frame is None:
-            self._last_frame = numpy.array(bg,copy=True)
         have_frame = False
         for timestamp, regions in self._ufmf.readframes():
+            if self._ufmf.use_conventional_named_mean_fmf:
+                self._last_frame = self._ufmf.get_mean_for_timestamp(timestamp)
+            else:
+                if self._last_frame is None:
+                    self._last_frame = numpy.array(self._bg0,copy=True)
             have_frame = True
             for xmin,ymin,bufim in regions:
                 h,w=bufim.shape
-                self._last_frame[ymin:ymin+h, xmin:xmin+w] = bufim
+                self._last_frame[ymin:ymin+h, xmin:xmin+w]=(bufim-self._darken)
             break # only want 1 frame
         if not have_frame:
             raise NoMoreFramesException('EOF')
@@ -227,11 +254,9 @@ class FlyMovieEmulator(object):
         self._ufmf.seek( start_pos )
 
     def get_height(self):
-        bg,ts0=self._ufmf.get_bg_image()
-        return bg.shape[0]
+        return self._bg0.shape[0]
     def get_width(self):
-        bg,ts0=self._ufmf.get_bg_image()
-        return bg.shape[1]
+        return self._bg0.shape[1]
 
 class UfmfSaver:
     """class to write (save) .ufmf files"""
@@ -288,14 +313,8 @@ class UfmfSaver:
             if ymax == self.height:
                 ymin = self.height - (2*self.image_radius)
 
-            try:
-                assert ymax-ymin == (2*self.image_radius)
-                assert xmax-xmin == (2*self.image_radius)
-            except:
-                print 'xmin, xidx, xmax',xmin, xidx, xmax
-                print 'ymin, yidx, ymax',ymin, yidx, ymax
-                print 'self.image_radius',self.image_radius
-                raise
+            assert ymax-ymin == (2*self.image_radius)
+            assert xmax-xmin == (2*self.image_radius)
 
             roi = origframe[ ymin:ymax, xmin:xmax ]
             this_str_buf = roi.tostring()
