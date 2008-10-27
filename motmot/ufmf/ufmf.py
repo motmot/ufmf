@@ -182,8 +182,10 @@ class NoSuchFrameError(IndexError):
 class FlyMovieEmulator(object):
     def __init__(self,filename,
                  darken=0,
-                 allow_no_such_frame_errors=False):
-        self._ufmf = Ufmf(filename)
+                 allow_no_such_frame_errors=False,
+                 **kwargs):
+        self._ufmf = Ufmf(
+            filename,**kwargs)
         self._start = self._ufmf.tell()
         self._fno2loc = None
         self._timestamps = None
