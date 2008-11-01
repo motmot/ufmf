@@ -9,8 +9,7 @@ def main():
     parser = OptionParser(usage)
 
     parser.add_option("--darken", type='int',default=0,
-                      help="show saved regions as darker by this amount",
-                      default=False)
+                      help="show saved regions as darker by this amount")
 
     (options, args) = parser.parse_args()
 
