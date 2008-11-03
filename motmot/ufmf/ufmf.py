@@ -196,6 +196,9 @@ class FlyMovieEmulator(object):
         self._darken=darken
         self._allow_no_such_frame_errors = allow_no_such_frame_errors
 
+    def close(self):
+        self._ufmf.close()
+
     def get_n_frames(self):
         self._fill_timestamps_and_locs()
         last_frame = len(self._fno2loc)
