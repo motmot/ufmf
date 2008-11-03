@@ -2,7 +2,7 @@ from __future__ import division
 import sys
 import struct
 import warnings
-import os.path
+import os.path, hashlib
 
 import numpy
 import numpy as np
@@ -179,6 +179,23 @@ class Ufmf(object):
 class NoSuchFrameError(IndexError):
     pass
 
+def md5sum_headtail(filename):
+    """quickly calculate a hash value for an even giant file"""
+    fd = open(filename,mode='rb')
+    start_bytes = fd.read(1000)
+
+    try:
+        fd.seek(-1000,os.SEEK_END)
+    except IOError,err:
+        # it's OK, we'll just read up to another 1000 bytes
+        pass
+
+    stop_bytes = fd.read(1000)
+    bytes = start_bytes+stop_bytes
+    m = hashlib.md5()
+    m.update(bytes)
+    return m.digest()
+
 class FlyMovieEmulator(object):
     def __init__(self,filename,
                  darken=0,
@@ -248,11 +265,39 @@ class FlyMovieEmulator(object):
         if not have_frame:
             raise NoMoreFramesException('EOF')
         return self._last_frame, timestamp
+
     def _fill_timestamps_and_locs(self):
         if self._timestamps is not None:
             # already did this
             return
-        assert self._fno2loc is None
+
+        try:
+            src_dir, fname = os.path.split(os.path.abspath( self.filename ))
+            cache_dir = os.path.join( src_dir, '.ufmf-cache' )
+            if not os.path.exists(cache_dir):
+                os.mkdir(cache_dir)
+            fname_base = os.path.splitext(fname)[0]
+            cache_fname = os.path.join( cache_dir, fname_base+'.cache.npz' )
+
+            my_hash = md5sum_headtail(self.filename)
+            assert self._fno2loc is None
+
+            # load results from hash file
+            if os.path.exists(cache_fname):
+                npz = np.load(cache_fname)
+                cache_hash = str(npz['my_hash'])
+                if cache_hash==my_hash:
+                    self._timestamps = npz['timestamps']
+                    self._fno2loc = npz['fno2loc']
+                    return
+        except Exception, err:
+            if int(os.environ.get('UFMF_FORCE_CACHE','0')):
+                raise
+            else:
+                warnings.warn( str(err)+' (set environment variable '
+                               'UFMF_FORCE_CACHE=1 to raise)' )
+
+        # no hash file or stale hash file -- recompute
 
         self._timestamps = []
         self._fno2loc = []
@@ -263,6 +308,23 @@ class FlyMovieEmulator(object):
             self._fno2loc.append( self._ufmf.tell() )
         del self._fno2loc[-1] # remove last entry -- it's at end of file
         self._ufmf.seek( start_pos )
+
+        assert len(self._timestamps)==len(self._fno2loc)
+
+        try:
+            # save results to hash file
+            timestamps = np.array(self._timestamps)
+            fno2loc = np.array(self._fno2loc)
+            np.savez(cache_fname,
+                     my_hash=my_hash,
+                     timestamps=timestamps,
+                     fno2loc=fno2loc)
+        except Exception,err:
+            if int(os.environ.get('UFMF_FORCE_CACHE','0')):
+                raise
+            else:
+                warnings.warn( str(err)+' (set environment variable '
+                               'UFMF_FORCE_CACHE=1 to raise)' )
 
     def get_height(self):
         return self._bg0.shape[0]
