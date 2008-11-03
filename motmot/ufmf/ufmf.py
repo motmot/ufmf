@@ -117,6 +117,9 @@ class Ufmf(object):
                 self.use_conventional_named_mean_fmf = False
 
     def get_mean_for_timestamp(self, timestamp ):
+        if not hasattr(self,'_mean_fmf_timestamps'):
+            raise ValueError(
+                'ufmf %s does not have mean image data'%self._filename)
         fno=np.searchsorted(self._mean_fmf_timestamps,timestamp,side='right')-1
         mean_image, timestamp_mean = self._mean_fmf.get_frame(fno)
         assert timestamp_mean <= timestamp
