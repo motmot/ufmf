@@ -21,7 +21,7 @@ def main():
 
     if (sys.platform.startswith('win') or
         sys.platform.startswith('darwin')):
-        kws = dict(redirect=True,filename='playfmf.log')
+        kws = dict(redirect=True,filename='playufmf.log')
     else:
         kws = {}
     app = playfmf.MyApp(**kws)

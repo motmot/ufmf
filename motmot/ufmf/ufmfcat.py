@@ -48,12 +48,12 @@ def doit( filename,
 def main():
     usage = """%prog FILENAME [options]
 
-Pipe the contents of an .fmf file to stdout in the yuv4mpegpipe
-format. This allows an .fmf file to be converted to any format that
-ffmpeg supports. For example, to convert the file x.fmf to x.avi using
+Pipe the contents of an .ufmf file to stdout in the yuv4mpegpipe
+format. This allows an .ufmf file to be converted to any format that
+ffmpeg supports. For example, to convert the file x.ufmf to x.avi using
 the MPEG4 codec:
 
-%prog x.fmf | ffmpeg -vcodec msmpeg4v2 -i - x.avi
+%prog x.ufmf | ffmpeg -vcodec msmpeg4v2 -i - x.avi
 
 Note that due to issues I don't understand, the following bash script
 might be useful:
