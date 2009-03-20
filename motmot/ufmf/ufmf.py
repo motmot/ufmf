@@ -274,13 +274,13 @@ class FlyMovieEmulator(object):
             # already did this
             return
 
+        src_dir, fname = os.path.split(os.path.abspath( self.filename ))
+        cache_dir = os.path.join( src_dir, '.ufmf-cache' )
+        fname_base = os.path.splitext(fname)[0]
+        cache_fname = os.path.join( cache_dir, fname_base+'.cache.npz' )
         try:
-            src_dir, fname = os.path.split(os.path.abspath( self.filename ))
-            cache_dir = os.path.join( src_dir, '.ufmf-cache' )
             if not os.path.exists(cache_dir):
                 os.mkdir(cache_dir)
-            fname_base = os.path.splitext(fname)[0]
-            cache_fname = os.path.join( cache_dir, fname_base+'.cache.npz' )
 
             my_hash = md5sum_headtail(self.filename)
             assert self._fno2loc is None
@@ -297,8 +297,9 @@ class FlyMovieEmulator(object):
             if int(os.environ.get('UFMF_FORCE_CACHE','0')):
                 raise
             else:
-                warnings.warn( str(err)+' (set environment variable '
-                               'UFMF_FORCE_CACHE=1 to raise)' )
+                warnings.warn( 'While attempting to open cache in %s: %s '
+                               ' (set environment variable '
+                               'UFMF_FORCE_CACHE=1 to raise)'%(cache_fname,err))
 
         # no hash file or stale hash file -- recompute
 
