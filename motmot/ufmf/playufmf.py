@@ -11,6 +11,9 @@ def main():
     parser.add_option("--darken", type='int',default=0,
                       help="show saved regions as darker by this amount")
 
+    parser.add_option("--white-background", action='store_true', default=False,
+                      help="don't display background information")
+
     parser.add_option("--force-no-mean-fmf", action='store_false', default=True,
                       help="disable use of FILE_mean.fmf as background image source")
 
@@ -29,9 +32,12 @@ def main():
         kws = {}
     app = playfmf.MyApp(**kws)
     use_fmf = options.force_no_mean_fmf
+    if options.white_background:
+        use_fmf = False
     flymovie = ufmf.FlyMovieEmulator(filename,
                                      darken=options.darken,
                                      use_conventional_named_mean_fmf=use_fmf,
+                                     white_background=options.white_background,
                                      )
     app.OnNewMovie(flymovie)
     app.MainLoop()

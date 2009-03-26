@@ -72,7 +72,8 @@ class Ufmf(object):
 
     def __init__(self,filename,
                  seek_ok=True,
-                 use_conventional_named_mean_fmf=True):
+                 use_conventional_named_mean_fmf=True,
+                 ):
         mode = "rb"
         self._filename = filename
         self._fd = open(filename,mode=mode)
@@ -203,6 +204,7 @@ class FlyMovieEmulator(object):
     def __init__(self,filename,
                  darken=0,
                  allow_no_such_frame_errors=False,
+                 white_background=False,
                  **kwargs):
         self._ufmf = Ufmf(
             filename,**kwargs)
@@ -215,6 +217,9 @@ class FlyMovieEmulator(object):
         self._bg0,self._ts0=self._ufmf.get_bg_image()
         self._darken=darken
         self._allow_no_such_frame_errors = allow_no_such_frame_errors
+        if self._ufmf.use_conventional_named_mean_fmf:
+            assert white_background==False
+        self.white_background = white_background
 
     def close(self):
         self._ufmf.close()
@@ -257,13 +262,17 @@ class FlyMovieEmulator(object):
         for timestamp, regions in self._ufmf.readframes():
             if self._ufmf.use_conventional_named_mean_fmf:
                 self._last_frame = self._ufmf.get_mean_for_timestamp(timestamp)
+            elif self.white_background:
+                self._last_frame = numpy.empty(self._bg0.shape,dtype=np.uint8)
+                self._last_frame.fill(255)
             else:
                 if self._last_frame is None:
                     self._last_frame = numpy.array(self._bg0,copy=True)
             have_frame = True
             for xmin,ymin,bufim in regions:
                 h,w=bufim.shape
-                self._last_frame[ymin:ymin+h, xmin:xmin+w]=(bufim-self._darken)
+                self._last_frame[ymin:ymin+h, xmin:xmin+w]=\
+                                              np.clip(bufim-self._darken, 0,255)
             break # only want 1 frame
         if not have_frame:
             raise NoMoreFramesException('EOF')
