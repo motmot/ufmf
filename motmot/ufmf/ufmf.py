@@ -106,6 +106,7 @@ class Ufmf(object):
             self._fd_length = None
 
         self.use_conventional_named_mean_fmf = use_conventional_named_mean_fmf
+        self._sumsqf_fmf = None
         if self.use_conventional_named_mean_fmf:
             basename = os.path.splitext(self._filename)[0]
             fmf_filename = basename + '_mean.fmf'
@@ -114,17 +115,26 @@ class Ufmf(object):
                 self._mean_fmf_timestamps = self._mean_fmf.get_all_timestamps()
                 dt=self._mean_fmf_timestamps[1:]-self._mean_fmf_timestamps[:-1]
                 assert np.all(dt > 0) # make sure searchsorted will work
+
+                sumsqf_filename = basename + '_sumsqf.fmf'
+                if os.path.exists(fmf_filename):
+                    self._sumsqf_fmf = FMF.FlyMovie(sumsqf_filename)
             else:
                 self.use_conventional_named_mean_fmf = False
 
-    def get_mean_for_timestamp(self, timestamp ):
+    def get_mean_for_timestamp(self, timestamp, _return_more=False ):
         if not hasattr(self,'_mean_fmf_timestamps'):
             raise ValueError(
                 'ufmf %s does not have mean image data'%self._filename)
         fno=np.searchsorted(self._mean_fmf_timestamps,timestamp,side='right')-1
         mean_image, timestamp_mean = self._mean_fmf.get_frame(fno)
         assert timestamp_mean <= timestamp
-        return mean_image
+        if _return_more:
+            # assume same times as mean image
+            sumsqf_image, timestamp_sumsqf = self._sumsqf_fmf.get_frame(fno)
+            return mean_image, sumsqf_image
+        else:
+            return mean_image
 
     def get_bg_image(self):
         """return the background image"""
@@ -262,10 +272,15 @@ class FlyMovieEmulator(object):
         more = {}
         for timestamp, regions in self._ufmf.readframes():
             if self._ufmf.use_conventional_named_mean_fmf:
-                self._last_frame = np.array(
-                    self._ufmf.get_mean_for_timestamp(timestamp),
-                    copy=True)
-                more['mean'] = self._last_frame
+                tmp=self._ufmf.get_mean_for_timestamp(timestamp,
+                                                      _return_more=_return_more)
+                if _return_more:
+                    mean_image, sumsqf_image = tmp
+                    more['sumsqf'] = sumsqf_image
+                else:
+                    mean_image = tmp
+                self._last_frame = np.array(mean_image,copy=True)
+                more['mean'] = mean_image
             elif self.white_background:
                 self._last_frame = numpy.empty(self._bg0.shape,dtype=np.uint8)
                 self._last_frame.fill(255)
