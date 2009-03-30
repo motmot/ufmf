@@ -236,7 +236,7 @@ class FlyMovieEmulator(object):
     def get_all_timestamps(self):
         self._fill_timestamps_and_locs()
         return self._timestamps
-    def get_frame(self,fno,allow_partial_frames=False):
+    def get_frame(self,fno,allow_partial_frames=False,_return_more=False):
         if allow_partial_frames:
             warnings.warn('unsupported argument "allow_partial_frames" ignored')
         try:
@@ -247,7 +247,7 @@ class FlyMovieEmulator(object):
             else:
                 return self._bg0,self._ts0 # just return first background image
         else:
-            return self.get_next_frame()
+            return self.get_next_frame(_return_more=_return_more)
 
     def seek(self,fno):
         if 0<= fno < len(self._fno2loc):
@@ -257,11 +257,15 @@ class FlyMovieEmulator(object):
         else:
             raise NoSuchFrameError('fno %d not in .ufmf file'%fno)
 
-    def get_next_frame(self):
+    def get_next_frame(self, _return_more=False):
         have_frame = False
+        more = {}
         for timestamp, regions in self._ufmf.readframes():
             if self._ufmf.use_conventional_named_mean_fmf:
-                self._last_frame = self._ufmf.get_mean_for_timestamp(timestamp)
+                self._last_frame = np.array(
+                    self._ufmf.get_mean_for_timestamp(timestamp),
+                    copy=True)
+                more['mean'] = self._last_frame
             elif self.white_background:
                 self._last_frame = numpy.empty(self._bg0.shape,dtype=np.uint8)
                 self._last_frame.fill(255)
@@ -269,6 +273,7 @@ class FlyMovieEmulator(object):
                 if self._last_frame is None:
                     self._last_frame = numpy.array(self._bg0,copy=True)
             have_frame = True
+            more['regions'] = regions
             for xmin,ymin,bufim in regions:
                 h,w=bufim.shape
                 self._last_frame[ymin:ymin+h, xmin:xmin+w]=\
@@ -276,7 +281,10 @@ class FlyMovieEmulator(object):
             break # only want 1 frame
         if not have_frame:
             raise NoMoreFramesException('EOF')
-        return self._last_frame, timestamp
+        if _return_more:
+            return self._last_frame, timestamp, more
+        else:
+            return self._last_frame, timestamp
 
     def _fill_timestamps_and_locs(self):
         if self._timestamps is not None:
