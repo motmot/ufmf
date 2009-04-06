@@ -215,6 +215,7 @@ class FlyMovieEmulator(object):
                  darken=0,
                  allow_no_such_frame_errors=False,
                  white_background=False,
+                 abs_diff=False,
                  **kwargs):
         self._ufmf = Ufmf(
             filename,**kwargs)
@@ -230,6 +231,9 @@ class FlyMovieEmulator(object):
         if self._ufmf.use_conventional_named_mean_fmf:
             assert white_background==False
         self.white_background = white_background
+        self.abs_diff = abs_diff
+        if self.abs_diff:
+            assert self._ufmf.use_conventional_named_mean_fmf
 
     def close(self):
         self._ufmf.close()
@@ -293,6 +297,10 @@ class FlyMovieEmulator(object):
                 h,w=bufim.shape
                 self._last_frame[ymin:ymin+h, xmin:xmin+w]=\
                                               np.clip(bufim-self._darken, 0,255)
+            if self.abs_diff:
+                self._last_frame=abs(self._last_frame.astype(np.float32)-
+                                     mean_image.astype(np.float32))
+                self._last_frame = np.clip(self._last_frame,0,255).astype(np.uint8)
             break # only want 1 frame
         if not have_frame:
             raise NoMoreFramesException('EOF')
