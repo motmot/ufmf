@@ -283,7 +283,7 @@ class FlyMovieEmulator(object):
                     more['sumsqf'] = sumsqf_image
                 else:
                     mean_image = tmp
-                self._last_frame = np.array(mean_image,copy=True)
+                self._last_frame = np.array(mean_image,copy=True).astype(np.uint8)
                 more['mean'] = mean_image
             elif self.white_background:
                 self._last_frame = numpy.empty(self._bg0.shape,dtype=np.uint8)
