@@ -117,7 +117,7 @@ class Ufmf(object):
                 assert np.all(dt > 0) # make sure searchsorted will work
 
                 sumsqf_filename = basename + '_sumsqf.fmf'
-                if os.path.exists(fmf_filename):
+                if os.path.exists(sumsqf_filename):
                     self._sumsqf_fmf = FMF.FlyMovie(sumsqf_filename)
             else:
                 self.use_conventional_named_mean_fmf = False
