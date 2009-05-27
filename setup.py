@@ -15,5 +15,7 @@ setup(name='motmot.ufmf',
                         'ufmfcat = motmot.ufmf.ufmfcat:main',
                         'playufmf = motmot.ufmf.playufmf:main',
                         ],
+    'motmot.fview.plugins':'fview_ufmf_saver = motmot.ufmf.fview_plugin:UFMFFviewSaver',
+
     }
       )
