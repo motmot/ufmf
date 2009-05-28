@@ -3,7 +3,7 @@ import motmot.ufmf.ufmf as ufmf
 import numpy
 import tempfile, os
 
-ufmf_versions = [1]
+ufmf_versions = [None,1] # None = default
 
 def test_a():
     for version in ufmf_versions:
@@ -25,7 +25,8 @@ def check_a(version):
             us = ufmf.UfmfSaver( filename,
                                  frame1,
                                  timestamp1,
-                                 image_radius=5 )
+                                 image_radius=5,
+                                 version=version)
 
             frame2 = numpy.zeros( (h,w), dtype = numpy.uint8 )
 
@@ -74,7 +75,8 @@ def check_b(seek_ok, version):
             us = ufmf.UfmfSaver( filename,
                                  frame1,
                                  timestamp,
-                                 image_radius=radius )
+                                 image_radius=radius,
+                                 version=version)
 
             frame2 = numpy.zeros( (h,w), dtype = numpy.uint8 )
             frame2[:,0::2] = range(0, w, 2) # clips (broadcast)

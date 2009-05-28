@@ -375,7 +375,21 @@ class FlyMovieEmulator(object):
     def get_width(self):
         return self._bg0.shape[1]
 
-class UfmfSaver:
+def UfmfSaver( filename,
+               frame0=None,
+               timestamp0=None,
+               image_radius=None,
+               version=None):
+    """factory function to return UfmfSaverBase instance"""
+    if version is None:
+        version=1 # default version
+
+    if version==1:
+        if image_radius is None:
+            image_radius=10 # default
+        return UfmfSaverV1(filename,frame0,timestamp0,image_radius=image_radius)
+
+class UfmfSaverV1:
     """class to write (save) .ufmf files"""
     def __init__(self,
                  filename,
