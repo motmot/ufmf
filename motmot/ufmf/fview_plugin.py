@@ -52,7 +52,7 @@ class UFMFFviewSaver(traited_plugin.HasTraits_FViewPlugin):
         fibuf = FastImage.asfastimage(buf)
         l,b = buf_offset
         lbrt = l, b, l+fibuf.size.w-1, b+fibuf.size.h-1
-        if self._clear_take_event.is_set():
+        if self._clear_take_event.isSet():
             self._clear_take_event.clear()
         self.realtime_analyzer.do_work( fibuf, timestamp, framenumber,
                                         self.use_roi2)
