@@ -11,7 +11,8 @@ import motmot.FastImage.FastImage as FastImage
 import threading
 
 class CrossThreadEvent(traits.HasTraits):
-    _threading_event = traits.Any(transient=True) # threading.Event instance
+    """like threading.Event class, with button to set the event"""
+    _threading_event = traits.Any(transient=True)
     fire_event = traits.Button
 
     is_set = traits.Any(transient=True)
