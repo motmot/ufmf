@@ -1,12 +1,16 @@
 import pkg_resources
-import unittest
 import motmot.ufmf.ufmf as ufmf
 import numpy
 import tempfile, os
 
-class TestUfmf(unittest.TestCase):
+ufmf_versions = [1]
 
-    def test_a(self):
+def test_a():
+    for version in ufmf_versions:
+        yield check_a, version
+
+def check_a(version):
+    if 1: # indent to match old code organization
         w = 640
         h = 480
 
@@ -22,7 +26,6 @@ class TestUfmf(unittest.TestCase):
                                  frame1,
                                  timestamp1,
                                  image_radius=5 )
-
 
             frame2 = numpy.zeros( (h,w), dtype = numpy.uint8 )
 
@@ -49,13 +52,13 @@ class TestUfmf(unittest.TestCase):
         finally:
             os.unlink(filename)
 
-    def test_b_seek(self):
-        self._do_test_b( True )
+def test_b():
+    for seek in (True,False):
+        for version in ufmf_versions:
+            yield check_b, seek, version
 
-    def test_b_no_seek(self):
-        self._do_test_b( False )
-
-    def _do_test_b(self,seek_ok):
+def check_b(seek_ok, version):
+    if 1: # indent to match old code organization
         w = 752
         h = 240
 
@@ -126,11 +129,3 @@ class TestUfmf(unittest.TestCase):
             us2.close()
         finally:
             os.unlink(filename)
-
-def get_test_suite():
-    ts=unittest.TestSuite([unittest.makeSuite(TestUfmf),
-                           ])
-    return ts
-
-if __name__=='__main__':
-    get_test_suite().debug()
