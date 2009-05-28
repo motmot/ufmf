@@ -245,7 +245,6 @@ class UfmfV2(UfmfBase):
         intup = struct.unpack(FMT[2].HEADER, buf)
         (self._version, self._image_radius, coding_str_len) = intup
         self._coding = self._fd.read( coding_str_len )
-        print 'coding',self._coding
 
     def close(self):
         if self._file_opened:
