@@ -3,7 +3,7 @@ import motmot.ufmf.ufmf as ufmf
 import numpy
 import tempfile, os
 
-ufmf_versions = [None,1] # None = default
+ufmf_versions = [None,1,2] # None = default
 
 def test_a():
     for version in ufmf_versions:

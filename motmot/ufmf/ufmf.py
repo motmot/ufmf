@@ -14,11 +14,23 @@ import math
 
 import motmot.FlyMovieFormat.FlyMovieFormat as FMF
 
-# version 1 formats:
-HEADER_FMT = '<IIdII'
-CHUNKHEADER_FMT = '<dI'
-SUBHEADER_FMT = '<II'
-TIMESTAMP_FMT = 'd' # XXX struct.pack('<d',nan) dies
+class BaseDict(dict):
+    def __getattr__(self,name):
+        return self[name]
+    def __setattr__(self,name,value):
+        self[name]=value
+
+FMT = {1:BaseDict(HEADER = '<IIdII',
+                  CHUNKHEADER = '<dI',
+                  SUBHEADER = '<II',
+                  TIMESTAMP = 'd', # XXX struct.pack('<d',nan) dies
+                  ),
+       2:BaseDict(HEADER = '<IIdII',
+                  CHUNKHEADER = '<dI',
+                  SUBHEADER = '<II',
+                  TIMESTAMP = 'd', # XXX struct.pack('<d',nan) dies
+                  ),
+       }
 
 class NoMoreFramesException( Exception ):
     pass
@@ -48,12 +60,12 @@ class UfmfParser(object):
             if len(buf)!=chunkheadsz:
                 # no more frames (EOF)
                 break
-            intup = struct.unpack(CHUNKHEADER_FMT, buf)
+            intup = struct.unpack(FMT[1].CHUNKHEADER, buf)
             (timestamp, n_pts) = intup
             regions = []
             for ptnum in range(n_pts):
                 subbuf = fd.read(subsz)
-                intup = struct.unpack(SUBHEADER_FMT, subbuf)
+                intup = struct.unpack(FMT[1].SUBHEADER, subbuf)
                 xmin, ymin = intup
 
                 buf = fd.read( chunkimsize )
@@ -66,9 +78,9 @@ class UfmfParser(object):
 
 class Ufmf(object):
     """class to read .ufmf files"""
-    bufsz = struct.calcsize(HEADER_FMT)
-    chunkheadsz = struct.calcsize( CHUNKHEADER_FMT )
-    subsz = struct.calcsize(SUBHEADER_FMT)
+    bufsz = struct.calcsize(FMT[1].HEADER)
+    chunkheadsz = struct.calcsize( FMT[1].CHUNKHEADER )
+    subsz = struct.calcsize(FMT[1].SUBHEADER)
 
     def __init__(self,filename,
                  seek_ok=True,
@@ -78,7 +90,7 @@ class Ufmf(object):
         self._filename = filename
         self._fd = open(filename,mode=mode)
         buf = self._fd.read( self.bufsz )
-        intup = struct.unpack(HEADER_FMT, buf)
+        intup = struct.unpack(FMT[1].HEADER, buf)
         (self._version, self._image_radius,
          self._timestamp0,
          self._width, self._height) = intup
@@ -163,13 +175,13 @@ class Ufmf(object):
             if len(buf)!=self.chunkheadsz:
                 # no more frames (EOF)
                 break
-            intup = struct.unpack(CHUNKHEADER_FMT, buf)
+            intup = struct.unpack(FMT[1].CHUNKHEADER, buf)
             (timestamp, n_pts) = intup
 
             regions = []
             for ptnum in range(n_pts):
                 subbuf = self._fd.read(self.subsz)
-                intup = struct.unpack(SUBHEADER_FMT, subbuf)
+                intup = struct.unpack(FMT[1].SUBHEADER, subbuf)
                 xmin, ymin = intup
 
                 if (xmin < self._last_safe_x and
@@ -408,7 +420,7 @@ class UfmfSaverV1:
         assert bg_frame.dtype == numpy.uint8
         self.timestamp0 = timestamp0
 
-        self.file.write(struct.pack(HEADER_FMT,
+        self.file.write(struct.pack(FMT[1].HEADER,
                                     self.version, self.image_radius,
                                     self.timestamp0,
                                     self.width, self.height))
@@ -423,7 +435,7 @@ class UfmfSaverV1:
         assert origframe.shape == (self.height, self.width)
 
         n_pts = len(point_data)
-        self.file.write(struct.pack(CHUNKHEADER_FMT, timestamp, n_pts ))
+        self.file.write(struct.pack(FMT[1].CHUNKHEADER, timestamp, n_pts ))
         str_buf = []
         for this_point_data in point_data:
             xidx, yidx = this_point_data[:2]
@@ -449,7 +461,7 @@ class UfmfSaverV1:
 
             roi = origframe[ ymin:ymax, xmin:xmax ]
             this_str_buf = roi.tostring()
-            this_str_head = struct.pack(SUBHEADER_FMT, xmin, ymin)
+            this_str_head = struct.pack(FMT[1].SUBHEADER, xmin, ymin)
 
             str_buf.append( this_str_head + this_str_buf )
         fullstr = ''.join(str_buf)
