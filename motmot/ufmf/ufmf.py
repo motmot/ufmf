@@ -20,15 +20,16 @@ class BaseDict(dict):
     def __setattr__(self,name,value):
         self[name]=value
 
-FMT = {1:BaseDict(HEADER = '<IIdII',
+VERSION_FMT = '<I' # always the first bytes
+FMT = {1:BaseDict(HEADER = '<IIdII', # version, ....
                   CHUNKHEADER = '<dI',
                   SUBHEADER = '<II',
                   TIMESTAMP = 'd', # XXX struct.pack('<d',nan) dies
                   ),
-       2:BaseDict(HEADER = '<IIdII',
-                  CHUNKHEADER = '<dI',
-                  SUBHEADER = '<II',
-                  TIMESTAMP = 'd', # XXX struct.pack('<d',nan) dies
+       2:BaseDict(HEADER = '<III', # version, image radius, raw coding string length
+                  #CHUNKHEADER = '<dI',
+                  #SUBHEADER = '<II',
+                  #TIMESTAMP = 'd', # XXX struct.pack('<d',nan) dies
                   ),
        }
 
@@ -76,8 +77,30 @@ class UfmfParser(object):
             self.handle_frame(timestamp, regions)
         fd.close()
 
-class Ufmf(object):
-    """class to read .ufmf files"""
+def identify_ufmf_version(filename):
+    mode = "rb"
+    fd = open(filename,mode=mode)
+    version_buflen = struct.calcsize(VERSION_FMT)
+    version_buf = fd.read( version_buflen )
+    version, = struct.unpack(VERSION_FMT, version_buf)
+    fd.close()
+    return version
+
+def Ufmf(filename,**kwargs):
+    """factory function to return UfmfBase class instance"""
+    version = identify_ufmf_version(filename)
+    if version==1:
+        return UfmfV1(filename,**kwargs)
+    elif version==2:
+        return UfmfV2(filename,**kwargs)
+    else:
+        raise ValueError('unknown .ufmf version %d'%version)
+
+class UfmfBase(object):
+    pass
+
+class UfmfV1(UfmfBase):
+    """class to read .ufmf version 1 files"""
     bufsz = struct.calcsize(FMT[1].HEADER)
     chunkheadsz = struct.calcsize( FMT[1].CHUNKHEADER )
     subsz = struct.calcsize(FMT[1].SUBHEADER)
@@ -86,6 +109,7 @@ class Ufmf(object):
                  seek_ok=True,
                  use_conventional_named_mean_fmf=True,
                  ):
+        super(UfmfV1,self).__init__()
         mode = "rb"
         self._filename = filename
         self._fd = open(filename,mode=mode)
@@ -201,6 +225,32 @@ class Ufmf(object):
 
     def close(self):
         self._fd.close()
+
+class UfmfV2(UfmfBase):
+    """class to read .ufmf version 2 files"""
+
+    def __init__(self,file,seek_ok=True):
+        super(UfmfV2,self).__init__()
+        if hasattr(file,'write'):
+            # file-like object
+            self._file_opened=False
+            self._fd = file
+        else:
+            # filename
+            self._fd = open(file,mode='rb')
+            self._file_opened=True
+
+        bufsz = struct.calcsize(FMT[2].HEADER)
+        buf = self._fd.read( bufsz )
+        intup = struct.unpack(FMT[2].HEADER, buf)
+        (self._version, self._image_radius, coding_str_len) = intup
+        self._coding = self._fd.read( coding_str_len )
+        print 'coding',self._coding
+
+    def close(self):
+        if self._file_opened:
+            self._fd.close()
+            self._file_opened = False
 
 class NoSuchFrameError(IndexError):
     pass
@@ -387,33 +437,44 @@ class FlyMovieEmulator(object):
     def get_width(self):
         return self._bg0.shape[1]
 
-def UfmfSaver( filename,
+def UfmfSaver( file,
                frame0=None,
                timestamp0=None,
-               image_radius=None,
-               version=None):
+               **kwargs):
     """factory function to return UfmfSaverBase instance"""
+    default_version = 2
+    version = kwargs.pop('version',default_version)
     if version is None:
-        version=1 # default version
+        version = default_version
 
     if version==1:
-        if image_radius is None:
-            image_radius=10 # default
-        return UfmfSaverV1(filename,frame0,timestamp0,image_radius=image_radius)
+        return UfmfSaverV1(file,frame0,timestamp0,**kwargs)
+    elif version==2:
+        us = UfmfSaverV2(file,**kwargs)
+        if frame0 is not None:
+            # the frame0, timestamp0 kwargs are cruft from v1 files
+            us.add_chunk('mean',frame0,timestamp0)
+        return us
+    else:
+        raise ValueError('unknown version %s'%version)
 
-class UfmfSaverV1:
-    """class to write (save) .ufmf files"""
+class UfmfSaverBase(object):
+    def __init__(self,version):
+        self.version = version
+
+class UfmfSaverV1(UfmfSaverBase):
+    """class to write (save) .ufmf v1 files"""
     def __init__(self,
                  filename,
                  frame0,
                  timestamp0,
                  image_radius=10,
                  ):
+        super(UfmfSaverV1,self).__init__(1)
         self.filename = filename
         mode = "w+b"
         self.file = open(self.filename,mode=mode)
         self.image_radius = image_radius
-        self.version = 1
 
         bg_frame = numpy.asarray(frame0)
         self.height, self.width = bg_frame.shape
@@ -475,3 +536,27 @@ class UfmfSaverV1:
     def __del__(self):
         if hasattr(self,'file'):
             self.close()
+
+class UfmfSaverV2(UfmfSaverBase):
+    """class to write (save) .ufmf v2 files"""
+    def __init__(self, file, coding='MONO8', image_radius=10):
+        super(UfmfSaverV2,self).__init__(2)
+        if hasattr(file,'write'):
+            # file-like object
+            self.file = file
+            self._file_opened = False
+        else:
+            self.file = open(file,mode="w+b")
+            self._file_opened = True
+        buf = struct.pack( FMT[2].HEADER,
+                           self.version, image_radius, len(coding) )
+        self.file.write(buf)
+        self.file.write(coding)
+    def add_chunk(self,chunk_type,image_data,timestamp):
+        pass
+    def add_frame(self,origframe,timestamp,point_data):
+        pass
+    def close(self):
+        if self._file_opened:
+            self.file.close()
+            self._file_opened = False

@@ -27,6 +27,7 @@ def check_a(version):
                                  timestamp1,
                                  image_radius=5,
                                  version=version)
+            assert isinstance(us,ufmf.UfmfSaverBase)
 
             frame2 = numpy.zeros( (h,w), dtype = numpy.uint8 )
 
@@ -46,6 +47,7 @@ def check_a(version):
             us.close()
 
             us2 = ufmf.Ufmf(filename)
+            assert isinstance(us2,ufmf.UfmfBase)
             test_frame1, test_timestamp1 = us2.get_bg_image()
             assert numpy.allclose( test_frame1, frame1 )
             assert test_timestamp1 == timestamp1
@@ -77,7 +79,7 @@ def check_b(seek_ok, version):
                                  timestamp,
                                  image_radius=radius,
                                  version=version)
-
+            assert isinstance(us,ufmf.UfmfSaverBase)
             frame2 = numpy.zeros( (h,w), dtype = numpy.uint8 )
             frame2[:,0::2] = range(0, w, 2) # clips (broadcast)
             for i in range(h):
@@ -103,6 +105,7 @@ def check_b(seek_ok, version):
             us.close()
 
             us2 = ufmf.Ufmf(filename,seek_ok=seek_ok)
+            assert isinstance(us2,ufmf.UfmfBase)
             test_frame1, test_timestamp1 = us2.get_bg_image()
             assert numpy.allclose( test_frame1, frame1 )
             assert test_timestamp1 == 1
