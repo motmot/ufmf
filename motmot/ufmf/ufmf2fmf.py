@@ -18,7 +18,7 @@ def main():
     basefname = os.path.splitext(fname_in)[0]
     fname_out = basefname +'.fmf'
     ufmf2fmf(fname_in, fname_out)
-    
+
 if __name__=='__main__':
     main()
-        
+
