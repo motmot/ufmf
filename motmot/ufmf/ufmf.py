@@ -512,7 +512,7 @@ class UfmfSaverV1(UfmfSaverBase):
             ymin = max(0,ymin)
 
             ymax = ymin + 2*self.image_radius
-            ymax = min( ymax, self.width)
+            ymax = min( ymax, self.height)
             if ymax == self.height:
                 ymin = self.height - (2*self.image_radius)
 
