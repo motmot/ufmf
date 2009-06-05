@@ -611,11 +611,7 @@ def UfmfSaver( file,
     if version==1:
         return UfmfSaverV1(file,frame0,timestamp0,**kwargs)
     elif version==2:
-        us = UfmfSaverV2(file,frame0=frame0,timestamp0=timestamp0,**kwargs)
-        if frame0 is not None:
-            # the frame0, timestamp0 kwargs are cruft from v1 files
-            us.add_keyframe('mean',frame0,timestamp0)
-        return us
+        return UfmfSaverV2(file,frame0=frame0,timestamp0=timestamp0,**kwargs)
     else:
         raise ValueError('unknown version %s'%version)
 
@@ -722,8 +718,6 @@ class UfmfSaverV2(UfmfSaverBase):
         self.file.write(coding)
         self.max_width=max_width
         self.max_height=max_height
-        if frame0 is not None or timestamp0 is not None:
-            self.add_keyframe('frame0',frame0,timestamp0)
         if xinc_yinc is None:
             if coding=='MONO8':
                 xinc_yinc = (1,1)
@@ -735,6 +729,8 @@ class UfmfSaverV2(UfmfSaverBase):
             else:
                 warnings.warn('ufmf xinc_yinc set (1,1) because coding unknown')
         self.xinc, self.yinc = xinc_yinc
+        if frame0 is not None or timestamp0 is not None:
+            self.add_keyframe('frame0',frame0,timestamp0)
 
     def add_keyframe(self,keyframe_type,image_data,timestamp):
         char2 = len(keyframe_type)
