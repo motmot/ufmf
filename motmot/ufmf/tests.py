@@ -21,12 +21,19 @@ def check_a(version):
         timestamp1 = 1e-20
 
         filename = tempfile.mkstemp()[1]
+        radius = 5
+        if version==1:
+            kwargs = dict(image_radius=radius)
+        else:
+            kwargs = {}
+        subw = 2*radius
+        subh = 2*radius
         try:
             us = ufmf.UfmfSaver( filename,
                                  frame1,
                                  timestamp1,
-                                 image_radius=5,
-                                 version=version)
+                                 version=version,
+                                 **kwargs)
             assert isinstance(us,ufmf.UfmfSaverBase)
 
             frame2 = numpy.zeros( (h,w), dtype = numpy.uint8 )
@@ -38,8 +45,8 @@ def check_a(version):
             frame2[61,81] = 7
             timestamp2 = 1
 
-            pts = [ (35,25), # x,y
-                    (85,65),
+            pts = [ (35,25,subw,subh), # x,y,w,h
+                    (85,65,subw,subh), # x,y,w,h
                     ]
 
             us.add_frame( frame2, timestamp2, pts )
@@ -73,12 +80,18 @@ def check_b(seek_ok, version):
         radius = 15
 
         filename = tempfile.mkstemp()[1]
+        if version==1:
+            kwargs = dict(image_radius=radius)
+        else:
+            kwargs = {}
+        subw = 2*radius
+        subh = 2*radius
         try:
             us = ufmf.UfmfSaver( filename,
                                  frame1,
                                  timestamp,
-                                 image_radius=radius,
-                                 version=version)
+                                 version=version,
+                                 **kwargs)
             assert isinstance(us,ufmf.UfmfSaverBase)
             frame2 = numpy.zeros( (h,w), dtype = numpy.uint8 )
             frame2[:,0::2] = range(0, w, 2) # clips (broadcast)
@@ -98,7 +111,7 @@ def check_b(seek_ok, version):
                  (369,229),
                  ],
                 ]
-            all_pts = [ [(x+radius,y+radius) for (x,y) in pts ] for pts in ll_pts ]
+            all_pts = [ [(x+radius,y+radius,subw,subh) for (x,y) in pts ] for pts in ll_pts ]
             for pts in all_pts:
                 timestamp += 1
                 us.add_frame( frame2, timestamp, pts )

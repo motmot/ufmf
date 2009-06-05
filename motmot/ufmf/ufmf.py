@@ -1,8 +1,9 @@
 from __future__ import division
 import sys
-import struct
+import struct, collections
 import warnings
 import os.path, hashlib
+import os, stat
 
 import numpy
 import numpy as np
@@ -26,12 +27,16 @@ FMT = {1:BaseDict(HEADER = '<IIdII', # version, ....
                   SUBHEADER = '<II',
                   TIMESTAMP = 'd', # XXX struct.pack('<d',nan) dies
                   ),
-       2:BaseDict(HEADER = '<III', # version, image radius, raw coding string length
-                  #CHUNKHEADER = '<dI',
-                  #SUBHEADER = '<II',
-                  #TIMESTAMP = 'd', # XXX struct.pack('<d',nan) dies
+       2:BaseDict(HEADER = '<IB', # version, raw coding string length
+                  CHUNKID = '<B', # 0 = keyframe, 1 = points
+                  KEYFRAME1 = '<B', # (type name)
+                  KEYFRAME2 = '<cIId', # (dtype, width,height,timestamp)
+                  POINTS1 = '<dI', # timestamp, n_pts
+                  POINTS2 = '<HHHH', # x0, y0, w, h
                   ),
        }
+KEYFRAME_CHUNK = 0
+FRAME_CHUNK = 1
 
 class NoMoreFramesException( Exception ):
     pass
@@ -92,6 +97,8 @@ def Ufmf(filename,**kwargs):
     if version==1:
         return UfmfV1(filename,**kwargs)
     elif version==2:
+        if 'seek_ok' in kwargs:
+            kwargs.pop('seek_ok')
         return UfmfV2(filename,**kwargs)
     else:
         raise ValueError('unknown .ufmf version %d'%version)
@@ -227,22 +234,168 @@ class UfmfV1(UfmfBase):
 class UfmfV2(UfmfBase):
     """class to read .ufmf version 2 files"""
 
-    def __init__(self,file,seek_ok=True):
+    def __init__(self,file):
         super(UfmfV2,self).__init__()
-        if hasattr(file,'write'):
+        self._fd_length = None
+        if hasattr(file,'read'):
             # file-like object
             self._file_opened=False
             self._fd = file
         else:
             # filename
+            stat_result = os.stat(file)
+            self._fd_length = stat_result[stat.ST_SIZE]
             self._fd = open(file,mode='rb')
             self._file_opened=True
+        self._fd_start = self._fd.tell()
 
         bufsz = struct.calcsize(FMT[2].HEADER)
         buf = self._fd.read( bufsz )
         intup = struct.unpack(FMT[2].HEADER, buf)
-        (self._version, self._image_radius, coding_str_len) = intup
+        (self._version, coding_str_len) = intup
         self._coding = self._fd.read( coding_str_len )
+
+        # index of start pos of each frame chunk
+        self._frame_locations = []
+        # N of most recently read frame
+        self._cur_frame_idx = -1
+
+        # index of start pos of each keyframe chunk (by keyframe_type)
+        self._keyframe_locations = collections.defaultdict(list)
+
+        # N of most recently read keyframe (by keyframe_type)
+        self._cur_keyframe_idx = {}
+
+        if self._fd_length is None:
+            fd_here = self._fd.tell()
+            self._fd.seek(0,2)
+            fd_end = self._fd.tell()
+            self._fd.seek(fd_here,0)
+            self._fd_length = fd_end - self._fd_start
+        self._keyframe2_sz = struct.calcsize(FMT[2].KEYFRAME2)
+        self._points1_sz = struct.calcsize(FMT[2].POINTS1)
+        self._points2_sz = struct.calcsize(FMT[2].POINTS2)
+
+    def get_progress(self):
+        """get a fraction of completeness (approximate value)"""
+        if self._fd_length is None:
+            # seek_ok was false - don't know how long this is
+            return 0.0
+        dist = self._fd.tell()-self._fd_start
+        return dist/self._fd_length
+
+    def _get_keyframe_N(self, keyframe_type, N):
+        """get Nth keyframe of type keyframe_type"""
+        if keyframe_type in self._keyframe_locations:
+            self._keyframe_locations[keyframe_type]=[]
+        locations = self._keyframe_locations[keyframe_type]
+        assert N >= 0
+        result = None
+        while N >= len(locations):
+            # location not yet known
+            chunk_id, result = self._index_next_chunk()
+        if result is None:
+            # We didn't need to entire while loop -- we know frame location.
+            location = locations[N]
+            self._seek(location+1)
+            result = self._read_keyframe_chunk(location,return_frame=True)
+        else:
+            # If we did while loop (above), we stopped on good result.
+            assert chunk_id == KEYFRAME_CHUNK
+        test_keyframe_type,frame,timestamp=result
+        assert keyframe_type==test_keyframe_type
+        return frame,timestamp
+
+    def _seek(self,loc):
+        self._fd.seek(loc,0)
+
+    def _read_keyframe_chunk(self,start_location):
+        """read keyframe chunk from just after chunk_id byte
+
+        start_location is the file locate at which the chunk started.
+        (i.e. curpos-1)
+        """
+        len_type = ord(self._fd.read(1))
+        keyframe_type = self._fd.read(len_type)
+        assert len(keyframe_type)==len_type
+        intup = struct.unpack(FMT[2].KEYFRAME2,
+                              self._fd.read(self._keyframe2_sz))
+        dtype_char,width,height,timestamp=intup
+
+        previous_idx = self._cur_keyframe_idx.get(keyframe_type,-1)
+        this_idx = previous_idx + 1
+        locations = self._keyframe_locations[keyframe_type]
+        if this_idx >= len(locations):
+            assert this_idx==len(locations)
+            locations.append(start_location)
+        self._cur_keyframe_idx[keyframe_type] = this_idx
+
+        if dtype_char=='B':
+            dtype=np.uint8
+            sz=1
+        elif dtype_char=='f':
+            dtype=np.float32
+            sz=4
+        else:
+            pos = self._fd.tell()
+            raise ValueError('unknown dtype char')
+        read_len = width*height*sz
+        buf = self._fd.read(read_len)
+        if len(buf)!=read_len:
+            raise ValueError('short read')
+        frame = np.fromstring(buf,dtype=dtype)
+        frame.shape = (height,width)
+        return keyframe_type,frame,timestamp
+
+    def _read_frame_chunk(self,start_location):
+        """read frame chunk from just after chunk_id byte
+
+        start_location is the file locate at which the chunk started
+        (i.e. curpos-1)
+        """
+        intup = struct.unpack(FMT[2].POINTS1,
+                              self._fd.read(self._points1_sz))
+        timestamp, n_pts = intup
+        self._cur_frame_idx += 1
+        if self._cur_frame_idx >= len(self._frame_locations):
+            assert self._cur_frame_idx == len(self._frame_locations)
+            self._frame_locations.append(start_location)
+        regions = []
+        for ptno in range(n_pts):
+            intup = struct.unpack(FMT[2].POINTS2,
+                                  self._fd.read(self._points2_sz))
+            (xmin, ymin, w, h) = intup
+            lenbuf = w*h
+            buf = self._fd.read(lenbuf)
+            print 'len(buf)',len(buf)
+            print 'w*h',w*h
+            im = np.fromstring(buf,dtype=np.uint8)
+            im.shape = (h,w)
+            regions.append( (xmin,ymin,im) )
+        return timestamp,regions
+
+    def readframes(self):
+        """return a generator of the frame information"""
+        while 1:
+            chunk_id, result = self._index_next_chunk()
+            if chunk_id==FRAME_CHUNK:
+                yield result # (timestamp,regions)
+
+    def _index_next_chunk(self):
+        loc = self._fd.tell()
+        chunk_id = ord(self._fd.read(1))
+        if chunk_id==KEYFRAME_CHUNK:
+            result = self._read_keyframe_chunk(loc)
+        elif chunk_id==FRAME_CHUNK:
+            # read frame chunk
+            result = self._read_frame_chunk(loc)
+        else:
+            raise ValueError('unexpected byte where chunk ID expected')
+        return chunk_id, result
+
+    def get_bg_image(self):
+        """return the first raw image (for compatability with UfmfV1)"""
+        return self._get_keyframe_N('frame0',0)
 
     def close(self):
         if self._file_opened:
@@ -447,10 +600,10 @@ def UfmfSaver( file,
     if version==1:
         return UfmfSaverV1(file,frame0,timestamp0,**kwargs)
     elif version==2:
-        us = UfmfSaverV2(file,**kwargs)
+        us = UfmfSaverV2(file,frame0=frame0,timestamp0=timestamp0,**kwargs)
         if frame0 is not None:
             # the frame0, timestamp0 kwargs are cruft from v1 files
-            us.add_chunk('mean',frame0,timestamp0)
+            us.add_keyframe('mean',frame0,timestamp0)
         return us
     else:
         raise ValueError('unknown version %s'%version)
@@ -536,7 +689,14 @@ class UfmfSaverV1(UfmfSaverBase):
 
 class UfmfSaverV2(UfmfSaverBase):
     """class to write (save) .ufmf v2 files"""
-    def __init__(self, file, coding='MONO8', image_radius=10):
+    def __init__(self, file,
+                 coding='MONO8',
+                 frame0=None,
+                 timestamp0=None,
+                 max_width=np.inf,
+                 max_height=np.inf,
+                 xinc_yinc=None,
+                 ):
         super(UfmfSaverV2,self).__init__(2)
         if hasattr(file,'write'):
             # file-like object
@@ -546,13 +706,100 @@ class UfmfSaverV2(UfmfSaverBase):
             self.file = open(file,mode="w+b")
             self._file_opened = True
         buf = struct.pack( FMT[2].HEADER,
-                           self.version, image_radius, len(coding) )
+                           self.version, len(coding) )
         self.file.write(buf)
         self.file.write(coding)
-    def add_chunk(self,chunk_type,image_data,timestamp):
-        pass
+        self.max_width=max_width
+        self.max_height=max_height
+        if frame0 is not None or timestamp0 is not None:
+            self.add_keyframe('frame0',frame0,timestamp0)
+        if xinc_yinc is None:
+            if coding=='MONO8':
+                xinc_yinc = (1,1)
+            elif coding.startswith('MONO8:'):
+                # Bayer pattern
+                xinc_yinc = (2,2)
+            elif coding=='YUV422':
+                xinc_yinc = (4,1)
+            else:
+                warnings.warn('ufmf xinc_yinc set (1,1) because coding unknown')
+        self.xinc, self.yinc = xinc_yinc
+
+    def add_keyframe(self,keyframe_type,image_data,timestamp):
+        char2 = len(keyframe_type)
+        np_image_data = numpy.asarray(image_data)
+        if np_image_data.dtype == np.uint8:
+            dtype = 'B'
+        elif np_image_data.dtype == np.float32:
+            dtype = 'f'
+        else:
+            raise ValueError('dtype %s not supported'%image_data.dtype)
+        assert np_image_data.ndim == 2
+        height, width = np_image_data.shape
+        assert np_image_data.strides[0] == width
+        assert np_image_data.strides[1] == 1
+        b =  chr(KEYFRAME_CHUNK) + chr(char2) + keyframe_type # chunkid, len(type), type
+        b += struct.pack(FMT[2].KEYFRAME2,dtype,width,height,timestamp)
+        self.file.write(b)
+        self.file.write(buffer(np_image_data))
+        print 'added keyframe', keyframe_type
+
     def add_frame(self,origframe,timestamp,point_data):
-        pass
+        n_pts = len(point_data)
+        b = chr(FRAME_CHUNK) + struct.pack(FMT[2].POINTS1, timestamp, n_pts)
+        self.file.write(b)
+        str_buf = []
+        origframe = np.asarray(origframe)
+        origframe_h, origframe_w = origframe.shape
+        if len(point_data):
+            for this_point_data in point_data:
+                xidx, yidx, w, h = this_point_data[:4]
+                w_radius = w//2
+                h_radius = h//2
+
+                xmin = int(round(xidx-w_radius)//self.xinc*self.xinc) # keep 2x2 Bayer
+                xmin = max(0,xmin)
+
+                xmax = xmin + w
+                newxmax = min( xmax, self.max_width, origframe_w)
+                if newxmax != xmax:
+                    xmin = newxmax - w
+                    xmax = newxmax
+
+                ymin = int(round(yidx-h_radius)//self.yinc*self.yinc) # keep 2x2 Bayer
+                ymin = max(0,ymin)
+
+                ymax = ymin + h
+                newymax = min( ymax, self.max_height, origframe_h)
+                if newymax != ymax:
+                    ymin = newymax - h
+                    ymax = newymax
+
+                ## print
+                ## print 'ymax',ymax
+                ## print 'ymin',ymin
+                ## print 'h',h
+                ## print 'xmax',xmax
+                ## print 'xmin',xmin
+                ## print 'w',w
+                ## print 'origframe',origframe.shape
+                assert ymax-ymin == h
+                assert xmax-xmin == w
+
+                roi = origframe[ ymin:ymax, xmin:xmax ]
+                this_str_buf = roi.tostring()
+                ## print 'roi.shape',roi.shape
+                ## print 'len(this_str_buf)',len(this_str_buf)
+                ## print 'w*h',w*h
+                assert len(this_str_buf)==w*h
+                this_str_head = struct.pack(FMT[2].POINTS2, xmin, ymin, w, h)
+
+                str_buf.append( this_str_head + this_str_buf )
+            fullstr = ''.join(str_buf)
+            self.file.write(fullstr)
+        self.last_timestamp = timestamp
+        print 'added frame with %d points'%(len(point_data),)
+
     def close(self):
         if self._file_opened:
             self.file.close()
