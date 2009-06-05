@@ -250,10 +250,10 @@ class UfmfV2(UfmfBase):
         self._fd_start = self._fd.tell()
 
         bufsz = struct.calcsize(FMT[2].HEADER)
-        buf = self._fd.read( bufsz )
+        buf = self._fd_read( bufsz )
         intup = struct.unpack(FMT[2].HEADER, buf)
         (self._version, coding_str_len) = intup
-        self._coding = self._fd.read( coding_str_len )
+        self._coding = self._fd_read( coding_str_len )
 
         # index of start pos of each frame chunk
         self._frame_locations = []
@@ -294,6 +294,8 @@ class UfmfV2(UfmfBase):
         while N >= len(locations):
             # location not yet known
             chunk_id, result = self._index_next_chunk()
+            if chunk_id is None:
+                raise ValueError('sought keyframe that is not in file')
         if result is None:
             # We didn't need to entire while loop -- we know frame location.
             location = locations[N]
@@ -315,11 +317,11 @@ class UfmfV2(UfmfBase):
         start_location is the file locate at which the chunk started.
         (i.e. curpos-1)
         """
-        len_type = ord(self._fd.read(1))
-        keyframe_type = self._fd.read(len_type)
+        len_type = ord(self._fd_read(1))
+        keyframe_type = self._fd_read(len_type)
         assert len(keyframe_type)==len_type
         intup = struct.unpack(FMT[2].KEYFRAME2,
-                              self._fd.read(self._keyframe2_sz))
+                              self._fd_read(self._keyframe2_sz))
         dtype_char,width,height,timestamp=intup
 
         previous_idx = self._cur_keyframe_idx.get(keyframe_type,-1)
@@ -340,9 +342,7 @@ class UfmfV2(UfmfBase):
             pos = self._fd.tell()
             raise ValueError('unknown dtype char')
         read_len = width*height*sz
-        buf = self._fd.read(read_len)
-        if len(buf)!=read_len:
-            raise ValueError('short read')
+        buf = self._fd_read(read_len)
         frame = np.fromstring(buf,dtype=dtype)
         frame.shape = (height,width)
         return keyframe_type,frame,timestamp
@@ -354,7 +354,7 @@ class UfmfV2(UfmfBase):
         (i.e. curpos-1)
         """
         intup = struct.unpack(FMT[2].POINTS1,
-                              self._fd.read(self._points1_sz))
+                              self._fd_read(self._points1_sz))
         timestamp, n_pts = intup
         self._cur_frame_idx += 1
         if self._cur_frame_idx >= len(self._frame_locations):
@@ -363,12 +363,10 @@ class UfmfV2(UfmfBase):
         regions = []
         for ptno in range(n_pts):
             intup = struct.unpack(FMT[2].POINTS2,
-                                  self._fd.read(self._points2_sz))
+                                  self._fd_read(self._points2_sz))
             (xmin, ymin, w, h) = intup
             lenbuf = w*h
-            buf = self._fd.read(lenbuf)
-            print 'len(buf)',len(buf)
-            print 'w*h',w*h
+            buf = self._fd_read(lenbuf)
             im = np.fromstring(buf,dtype=np.uint8)
             im.shape = (h,w)
             regions.append( (xmin,ymin,im) )
@@ -380,10 +378,23 @@ class UfmfV2(UfmfBase):
             chunk_id, result = self._index_next_chunk()
             if chunk_id==FRAME_CHUNK:
                 yield result # (timestamp,regions)
+            elif chunk_id is None:
+                break # no more frames
+
+    def _fd_read(self,n_bytes,short_OK=False):
+        buf = self._fd.read(n_bytes)
+        if len(buf)!=n_bytes:
+            if not short_OK:
+                raise ValueError('expected %d bytes, got %d: short file?'%(
+                    n_bytes,len(buf)))
+        return buf
 
     def _index_next_chunk(self):
         loc = self._fd.tell()
-        chunk_id = ord(self._fd.read(1))
+        chunk_id_str = self._fd_read(1,short_OK=True)
+        if chunk_id_str == '':
+            return None, None
+        chunk_id = ord(chunk_id_str)
         if chunk_id==KEYFRAME_CHUNK:
             result = self._read_keyframe_chunk(loc)
         elif chunk_id==FRAME_CHUNK:
@@ -742,7 +753,6 @@ class UfmfSaverV2(UfmfSaverBase):
         b += struct.pack(FMT[2].KEYFRAME2,dtype,width,height,timestamp)
         self.file.write(b)
         self.file.write(buffer(np_image_data))
-        print 'added keyframe', keyframe_type
 
     def add_frame(self,origframe,timestamp,point_data):
         n_pts = len(point_data)
@@ -763,7 +773,8 @@ class UfmfSaverV2(UfmfSaverBase):
                 xmax = xmin + w
                 newxmax = min( xmax, self.max_width, origframe_w)
                 if newxmax != xmax:
-                    xmin = newxmax - w
+                    #xmin = newxmax - w
+                    w = newxmax - xmin
                     xmax = newxmax
 
                 ymin = int(round(yidx-h_radius)//self.yinc*self.yinc) # keep 2x2 Bayer
@@ -772,25 +783,15 @@ class UfmfSaverV2(UfmfSaverBase):
                 ymax = ymin + h
                 newymax = min( ymax, self.max_height, origframe_h)
                 if newymax != ymax:
-                    ymin = newymax - h
+                    #ymin = newymax - h
+                    h = newymax - ymin
                     ymax = newymax
 
-                ## print
-                ## print 'ymax',ymax
-                ## print 'ymin',ymin
-                ## print 'h',h
-                ## print 'xmax',xmax
-                ## print 'xmin',xmin
-                ## print 'w',w
-                ## print 'origframe',origframe.shape
                 assert ymax-ymin == h
                 assert xmax-xmin == w
 
                 roi = origframe[ ymin:ymax, xmin:xmax ]
                 this_str_buf = roi.tostring()
-                ## print 'roi.shape',roi.shape
-                ## print 'len(this_str_buf)',len(this_str_buf)
-                ## print 'w*h',w*h
                 assert len(this_str_buf)==w*h
                 this_str_head = struct.pack(FMT[2].POINTS2, xmin, ymin, w, h)
 
@@ -798,7 +799,6 @@ class UfmfSaverV2(UfmfSaverBase):
             fullstr = ''.join(str_buf)
             self.file.write(fullstr)
         self.last_timestamp = timestamp
-        print 'added frame with %d points'%(len(point_data),)
 
     def close(self):
         if self._file_opened:
