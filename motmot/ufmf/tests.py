@@ -131,11 +131,6 @@ def check_b(seek_ok, version):
                 test_timestamp += 1
                 for test_ll,region in zip(test_ll_pts,regions):
                     xmin,ymin, bufim = region
-                    print
-                    print 'xmin,ymin',xmin,ymin
-                    print 'test_ll',test_ll
-                    assert xmin==test_ll[0]
-                    assert ymin==test_ll[1]
 
                     # x
                     tj0 = test_ll[0]
@@ -143,8 +138,18 @@ def check_b(seek_ok, version):
                     # y
                     ti0 = test_ll[1]
                     ti1 = test_ll[1]+2*radius
+                    if version==1:
+                        # version 1 has fixed return size
+                        if ti1 > frame2.shape[0]:
+                            ti1 = frame2.shape[0]
+                            ti0 = ti1-2*radius
+                        if tj1 > frame2.shape[1]:
+                            tj1 = frame2.shape[1]
+                            tj0 = tj1-2*radius
 
                     testbuf = frame2[ti0:ti1,tj0:tj1]
+                    assert xmin==tj0
+                    assert ymin==ti0
                     assert testbuf.shape == bufim.shape
                     assert numpy.allclose( testbuf, bufim )
             us2.close()
