@@ -192,10 +192,8 @@ class UfmfV1(UfmfBase):
 
     def readframes(self):
         """return a generator of the frame information"""
-        cnt=0
         while 1:
             buf = self._fd.read( self.chunkheadsz )
-            cnt+=1
             if len(buf)!=self.chunkheadsz:
                 # no more frames (EOF)
                 break
