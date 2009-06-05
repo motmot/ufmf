@@ -131,6 +131,9 @@ def check_b(seek_ok, version):
                 test_timestamp += 1
                 for test_ll,region in zip(test_ll_pts,regions):
                     xmin,ymin, bufim = region
+                    print
+                    print 'xmin,ymin',xmin,ymin
+                    print 'test_ll',test_ll
                     assert xmin==test_ll[0]
                     assert ymin==test_ll[1]
 
