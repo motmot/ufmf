@@ -306,103 +306,17 @@ class UfmfV1(UfmfBase):
     def close(self):
         self._fd.close()
 
-class UfmfV2(UfmfBase):
-    """class to read .ufmf version 2 files"""
+class _UFmfV2LowLevelReader(object):
+    def __init__(self,fd):
+        self._fd = fd
 
-    def __init__(self,file,mode='rb'):
-        super(UfmfV2,self).__init__()
-        self._fd_length = None
-        if hasattr(file,'read'):
-            # file-like object
-            self._file_opened=False
-            self._fd = file
-        else:
-            # filename
-            stat_result = os.stat(file)
-            self._fd_length = stat_result[stat.ST_SIZE]
-            self._fd = open(file,mode=mode)
-            self._file_opened=True
-        self._fd_start = self._fd.tell()
-
-        bufsz = struct.calcsize(FMT[2].HEADER)
-        buf = self._fd_read( bufsz )
-        intup = struct.unpack(FMT[2].HEADER, buf)
-        (self._version, index_location, coding_str_len) = intup
-        self._coding = self._fd_read( coding_str_len )
-
-        if index_location == 0:
-            # no pre-existing index. generate it.
-            # save it.
-            raise NotImplementedError('x')
-        else:
-            # read index.'
-            self._seek(index_location)
-            buf = self._fd.read(4096)
-            id = buf[:1]
-            buf = buf[1:]
-            assert id=='d' # dictionary
-            self._index,buf_remaining = _read_dict(self._fd, buf_remaining=buf)
-            if len(buf_remaining)!=0:
-                raise ValueError('bytes after expected end of file')
-            raise NotImplementedError('reading from index not finished')
-
-        # index of start pos of each frame chunk
-        self._frame_locations = []
-        # N of most recently read frame
-        self._cur_frame_idx = -1
-
-        # index of start pos of each keyframe chunk (by keyframe_type)
-        self._keyframe_locations = collections.defaultdict(list)
-
-        # N of most recently read keyframe (by keyframe_type)
-        self._cur_keyframe_idx = {}
-
-        if self._fd_length is None:
-            fd_here = self._fd.tell()
-            self._fd.seek(0,2)
-            fd_end = self._fd.tell()
-            self._fd.seek(fd_here,0)
-            self._fd_length = fd_end - self._fd_start
         self._keyframe2_sz = struct.calcsize(FMT[2].KEYFRAME2)
         self._points1_sz = struct.calcsize(FMT[2].POINTS1)
         self._points2_sz = struct.calcsize(FMT[2].POINTS2)
 
-    def get_progress(self):
-        """get a fraction of completeness (approximate value)"""
-        if self._fd_length is None:
-            # seek_ok was false - don't know how long this is
-            return 0.0
-        dist = self._fd.tell()-self._fd_start
-        return dist/self._fd_length
-
-    def _get_keyframe_N(self, keyframe_type, N):
-        """get Nth keyframe of type keyframe_type"""
-        if keyframe_type in self._keyframe_locations:
-            self._keyframe_locations[keyframe_type]=[]
-        locations = self._keyframe_locations[keyframe_type]
-        assert N >= 0
-        result = None
-        while N >= len(locations):
-            # location not yet known
-            chunk_id, result = self._index_next_chunk()
-            if chunk_id is None:
-                raise NoMoreFramesException('sought keyframe not in file')
-        if result is None:
-            # We didn't need to entire while loop -- we know frame location.
-            location = locations[N]
-            self._seek(location+1)
-            result = self._read_keyframe_chunk(location,return_frame=True)
-        else:
-            # If we did while loop (above), we stopped on good result.
-            assert chunk_id == KEYFRAME_CHUNK
-        test_keyframe_type,frame,timestamp=result
-        assert keyframe_type==test_keyframe_type
-        return frame,timestamp
-
-    def _seek(self,loc):
-        self._fd.seek(loc,0)
-
-    def _read_keyframe_chunk(self,start_location):
+    def _read_keyframe_chunk(self,start_location=None,
+                             update_index=None,
+                             ):
         """read keyframe chunk from just after chunk_id byte
 
         start_location is the file locate at which the chunk started.
@@ -415,13 +329,13 @@ class UfmfV2(UfmfBase):
                               self._fd_read(self._keyframe2_sz))
         dtype_char,width,height,timestamp=intup
 
-        previous_idx = self._cur_keyframe_idx.get(keyframe_type,-1)
-        this_idx = previous_idx + 1
-        locations = self._keyframe_locations[keyframe_type]
-        if this_idx >= len(locations):
-            assert this_idx==len(locations)
-            locations.append(start_location)
-        self._cur_keyframe_idx[keyframe_type] = this_idx
+        if update_index is not None:
+            tmp = update_index['keyframe'][keyframe_type]
+            if len(tmp)==0:
+                tmp['timestamp']=[]
+                tmp['loc']=[]
+            tmp['timestamp'].append(timestamp)
+            tmp['loc'].append(start_location)
 
         if dtype_char=='B':
             dtype=np.uint8
@@ -430,7 +344,6 @@ class UfmfV2(UfmfBase):
             dtype=np.float32
             sz=4
         else:
-            pos = self._fd.tell()
             raise ValueError('unknown dtype char')
         read_len = width*height*sz
         buf = self._fd_read(read_len)
@@ -438,7 +351,9 @@ class UfmfV2(UfmfBase):
         frame.shape = (height,width)
         return keyframe_type,frame,timestamp
 
-    def _read_frame_chunk(self,start_location):
+    def _read_frame_chunk(self,start_location=None,
+                             update_index=None,
+                             ):
         """read frame chunk from just after chunk_id byte
 
         start_location is the file locate at which the chunk started
@@ -447,10 +362,10 @@ class UfmfV2(UfmfBase):
         intup = struct.unpack(FMT[2].POINTS1,
                               self._fd_read(self._points1_sz))
         timestamp, n_pts = intup
-        self._cur_frame_idx += 1
-        if self._cur_frame_idx >= len(self._frame_locations):
-            assert self._cur_frame_idx == len(self._frame_locations)
-            self._frame_locations.append(start_location)
+        if update_index is not None:
+            tmp = update_index['frame']
+            tmp.append(timestamp)
+            tmp.append(start_location)
         regions = []
         for ptno in range(n_pts):
             intup = struct.unpack(FMT[2].POINTS2,
@@ -463,14 +378,124 @@ class UfmfV2(UfmfBase):
             regions.append( (xmin,ymin,im) )
         return timestamp,regions
 
-    def readframes(self):
-        """return a generator of the frame information"""
+    def _fd_read(self,n_bytes,short_OK=False):
+        buf = self._fd.read(n_bytes)
+        if len(buf)!=n_bytes:
+            if not short_OK:
+                raise ValueError('expected %d bytes, got %d: short file?'%(
+                    n_bytes,len(buf)))
+        return buf
+
+class _UFmfV2Indexer(object):
+    """create an index from an un-unindexed .ufmf v2 file"""
+    def __init__(self,fd):
+        self._fd = fd
+
+        self._keyframe2_sz = struct.calcsize(FMT[2].KEYFRAME2)
+        self._points1_sz = struct.calcsize(FMT[2].POINTS1)
+        self._points2_sz = struct.calcsize(FMT[2].POINTS2)
+
+        self.r = _UFmfV2LowLevelReader(self._fd)
+        self._create_index()
+
+    def get_index(self):
+        return self._index
+
+    def get_expected_index_location(self):
+        return self._index_location
+
+    def _create_index(self):
+        self._index = {'keyframe':collections.defaultdict(dict),
+                       'frame':dict(timestamp=[],
+                                    loc=[])}
+
         while 1:
             chunk_id, result = self._index_next_chunk()
             if chunk_id==FRAME_CHUNK:
                 yield result # (timestamp,regions)
             elif chunk_id is None:
                 break # no more frames
+        self._index_location = self._fd.tell()
+
+    def _index_next_chunk(self):
+        loc = self._fd.tell()
+        chunk_id_str = self.r._fd_read(1,short_OK=True)
+        if chunk_id_str == '':
+            return None, None
+        chunk_id = ord(chunk_id_str)
+        if chunk_id==KEYFRAME_CHUNK:
+            result = self.r._read_keyframe_chunk(start_location=loc,
+                                                 update_index=self._index,
+                                                 )
+        elif chunk_id==FRAME_CHUNK:
+            # read frame chunk
+            result = self.r._read_frame_chunk(start_location=loc,
+                                              update_index=self._index,
+                                              )
+        else:
+            raise ValueError('unexpected byte where chunk ID expected')
+        return chunk_id, result
+
+class UfmfV2(UfmfBase):
+    """class to read .ufmf version 2 files"""
+
+    def __init__(self,file,mode='rb'):
+        super(UfmfV2,self).__init__()
+        if hasattr(file,'read'):
+            # file-like object
+            self._file_opened=False
+            self._fd = file
+        else:
+            # filename
+            stat_result = os.stat(file)
+            self._fd = open(file,mode=mode)
+            self._file_opened=True
+
+        bufsz = struct.calcsize(FMT[2].HEADER)
+        buf = self._fd_read( bufsz )
+        intup = struct.unpack(FMT[2].HEADER, buf)
+        (self._version, index_location, coding_str_len) = intup
+        self._coding = self._fd_read( coding_str_len )
+        self.next_frame = 0
+
+        if index_location == 0:
+            # no pre-existing index. generate it.
+            # save it.
+            tmp = _UFmfV2Indexer(self._fd)
+            self._index = tmp.get_index()
+            loc = tmp.get_expected_index_location()
+            self._fd.seek(loc)
+            _write_dict( self._fd, self._index )
+        else:
+            # read index
+            self._seek(index_location)
+            buf = self._fd.read(4096)
+            id = buf[:1]
+            buf = buf[1:]
+            assert id=='d' # dictionary
+            self._index,buf_remaining = _read_dict(self._fd, buf_remaining=buf)
+            if len(buf_remaining)!=0:
+                raise ValueError('bytes after expected end of file')
+
+        self._keyframe2_sz = struct.calcsize(FMT[2].KEYFRAME2)
+        self._points1_sz = struct.calcsize(FMT[2].POINTS1)
+        self._points2_sz = struct.calcsize(FMT[2].POINTS2)
+        self.r = _UFmfV2LowLevelReader(self._fd)
+
+    def get_progress(self):
+        locs = self._index['frame']['loc']
+        return float(self.next_frame)/len(locs)
+
+    def readframes(self):
+        locs = self._index['frame']['loc']
+        while self.next_frame < len(locs):
+            loc = locs[self.next_frame]
+            self.next_frame += 1
+
+            self._seek(loc+1)
+            result = self.r._read_frame_chunk()
+            timestamp,regions = result
+            yield timestamp,regions
 
     def _fd_read(self,n_bytes,short_OK=False):
         buf = self._fd.read(n_bytes)
@@ -480,20 +505,21 @@ class UfmfV2(UfmfBase):
                     n_bytes,len(buf)))
         return buf
 
-    def _index_next_chunk(self):
-        loc = self._fd.tell()
-        chunk_id_str = self._fd_read(1,short_OK=True)
-        if chunk_id_str == '':
-            return None, None
-        chunk_id = ord(chunk_id_str)
-        if chunk_id==KEYFRAME_CHUNK:
-            result = self._read_keyframe_chunk(loc)
-        elif chunk_id==FRAME_CHUNK:
-            # read frame chunk
-            result = self._read_frame_chunk(loc)
-        else:
-            raise ValueError('unexpected byte where chunk ID expected')
-        return chunk_id, result
+    def _get_keyframe_N(self, keyframe_type, N):
+        """get Nth keyframe of type keyframe_type"""
+        tmp = self._index['keyframe'][keyframe_type]
+        loc = tmp['loc'][N]
+        timestamp = tmp['timestamp'][N]
+
+        self._seek(loc+1)
+        result = self.r._read_keyframe_chunk()
+        test_keyframe_type,frame,test_timestamp=result
+        assert keyframe_type==test_keyframe_type
+        assert timestamp==test_timestamp
+        return frame,timestamp
+
+    def _seek(self,loc):
+        self._fd.seek(loc,0)
 
     def get_bg_image(self):
         """return the first raw image (for compatability with UfmfV1)"""
