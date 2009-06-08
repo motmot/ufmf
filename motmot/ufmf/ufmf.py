@@ -295,7 +295,7 @@ class UfmfV2(UfmfBase):
             # location not yet known
             chunk_id, result = self._index_next_chunk()
             if chunk_id is None:
-                raise ValueError('sought keyframe that is not in file')
+                raise NoMoreFramesException('sought keyframe not in file')
         if result is None:
             # We didn't need to entire while loop -- we know frame location.
             location = locations[N]
@@ -450,12 +450,16 @@ class FlyMovieEmulator(object):
         self._bg0,self._ts0=self._ufmf.get_bg_image()
         self._darken=darken
         self._allow_no_such_frame_errors = allow_no_such_frame_errors
-        if self._ufmf.use_conventional_named_mean_fmf:
+        if (isinstance(self._ufmf,UfmfV1) and
+            self._ufmf.use_conventional_named_mean_fmf):
             assert white_background==False
         self.white_background = white_background
         self.abs_diff = abs_diff
         if self.abs_diff:
-            assert self._ufmf.use_conventional_named_mean_fmf
+            if not (isinstance(self._ufmf,UfmfV1) and
+                    self._ufmf.use_conventional_named_mean_fmf):
+                raise NotImplementedError('abs_diff currently requires UfmfV1 '
+                                          'and use_conventional_named_mean_fmf')
 
     def close(self):
         self._ufmf.close()
