@@ -5,7 +5,7 @@ kws=dict(
 
 setup(name='motmot.ufmf',
       description='micro-fmf (.ufmf) format library',
-      version='0.1',
+      version='0.2',
       author='Andrew Straw',
       author_email='strawman@astraw.com',
       namespace_packages = ['motmot'],
@@ -16,7 +16,7 @@ setup(name='motmot.ufmf',
                         'playufmf = motmot.ufmf.playufmf:main',
                         'ufmf_from_fmf = motmot.ufmf.ufmf_from_fmf:main',
                         ],
-    'motmot.fview.plugins':'fview_ufmf_saver = motmot.ufmf.fview_plugin:UFMFFviewSaver',
-
+    'motmot.fview.plugins':
+    'fview_ufmf_saver = motmot.ufmf.fview_plugin:UFMFFviewSaver',
     }
       )
