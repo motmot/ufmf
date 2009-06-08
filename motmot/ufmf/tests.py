@@ -25,7 +25,9 @@ def check_a(version):
         if version==1:
             kwargs = dict(image_radius=radius)
         else:
-            kwargs = {}
+            kwargs = dict(max_width=w,
+                          max_height=h,
+                          )
         subw = 2*radius
         subh = 2*radius
         try:
@@ -83,7 +85,9 @@ def check_b(seek_ok, version):
         if version==1:
             kwargs = dict(image_radius=radius)
         else:
-            kwargs = {}
+            kwargs = dict(max_width=w,
+                          max_height=h,
+                          )
         subw = 2*radius
         subh = 2*radius
         try:
