@@ -467,6 +467,7 @@ class UfmfV2(UfmfBase):
          self._max_width, self._max_height,
          coding_str_len) = intup
         self._coding = self._r._fd_read( coding_str_len )
+        print 'loaded coding',self._coding
         self._next_frame = 0
 
         if index_location == 0:
@@ -511,6 +512,9 @@ class UfmfV2(UfmfBase):
 
     def get_max_size(self):
         return (self._max_width, self._max_height)
+
+    def get_coding(self):
+        return self._coding
 
     def get_progress(self):
         locs = self._index['frame']['loc']
@@ -587,7 +591,6 @@ class FlyMovieEmulator(object):
                  **kwargs):
         self._ufmf = Ufmf(
             filename,**kwargs)
-        self.format = 'MONO8' # by definition
         self._last_frame = None
         self.filename = filename
         try:
@@ -598,6 +601,7 @@ class FlyMovieEmulator(object):
         self._allow_no_such_frame_errors = allow_no_such_frame_errors
         if (isinstance(self._ufmf,UfmfV1) and
             self._ufmf.use_conventional_named_mean_fmf):
+            self.format = 'MONO8' # by definition
             self._fno2loc = None
             self._timestamps = None
             assert white_background==False
@@ -622,7 +626,11 @@ class FlyMovieEmulator(object):
             return self._ufmf.get_number_of_frames()
 
     def get_format(self):
-        return self.format
+        if isinstance(self._ufmf,UfmfV1):
+            return self.format
+        else:
+            return self._ufmf.get_coding()
+
     def get_bits_per_pixel(self):
         return 8
     def get_all_timestamps(self):
@@ -870,7 +878,7 @@ class UfmfSaverV1(UfmfSaverBase):
 class UfmfSaverV2(UfmfSaverBase):
     """class to write (save) .ufmf v2 files"""
     def __init__(self, file,
-                 coding='MONO8',
+                 coding=None,
                  frame0=None,
                  timestamp0=None,
                  max_width=None,
@@ -885,7 +893,9 @@ class UfmfSaverV2(UfmfSaverBase):
         else:
             self.file = open(file,mode="w+b")
             self._file_opened = True
+        assert coding is not None
         self.coding = coding
+        print 'saving with coding',coding
         if max_width is None or max_height is None:
             raise ValueError('max_width and max_height must be set')
         self.max_width=max_width
