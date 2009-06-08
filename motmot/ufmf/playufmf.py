@@ -24,6 +24,7 @@ def main():
         return
 
     filename = args[0]
+    version = ufmf.identify_ufmf_version(filename)
 
     if (sys.platform.startswith('win') or
         sys.platform.startswith('darwin')):
@@ -31,14 +32,19 @@ def main():
     else:
         kws = {}
     app = playfmf.MyApp(**kws)
-    use_fmf = options.force_no_mean_fmf
-    if options.white_background:
-        use_fmf = False
+
+    kwargs = {}
+    if version==1:
+        use_fmf = options.force_no_mean_fmf
+        if options.white_background:
+            use_fmf = False
+        kwargs.update(dict(use_conventional_named_mean_fmf=use_fmf,
+                           white_background=options.white_background,
+                           ))
+
     flymovie = ufmf.FlyMovieEmulator(filename,
                                      darken=options.darken,
-                                     use_conventional_named_mean_fmf=use_fmf,
-                                     white_background=options.white_background,
-                                     )
+                                     **kwargs)
     app.OnNewMovie(flymovie)
     app.MainLoop()
 
