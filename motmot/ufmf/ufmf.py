@@ -442,7 +442,6 @@ class FlyMovieEmulator(object):
                  **kwargs):
         self._ufmf = Ufmf(
             filename,**kwargs)
-        self._start = self._ufmf.tell()
         self._fno2loc = None
         self._timestamps = None
         self.format = 'MONO8' # by definition
