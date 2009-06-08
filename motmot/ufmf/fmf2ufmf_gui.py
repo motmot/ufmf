@@ -15,11 +15,14 @@ def doit(filename=None, output_filename=None, hide_gui=False):
         if not hide_gui:
             ufmf_writer.configure_traits()
         try:
+            count = 0
             while 1:
                 frame, timestamp = fmf.get_next_frame()
+                count += 1
                 ufmf_writer.add_frame( frame, timestamp )
         except fmf_mod.NoMoreFramesException, err:
             pass
+        print 'converted %d frames'%count
 
 def main():
     usage = """%prog FILENAME [options]"""
