@@ -27,16 +27,18 @@ FMT = {1:BaseDict(HEADER = '<IIdII', # version, ....
                   SUBHEADER = '<II',
                   TIMESTAMP = 'd', # XXX struct.pack('<d',nan) dies
                   ),
-       2:BaseDict(HEADER = '<IB', # version, raw coding string length
+       2:BaseDict(HEADER = '<ILB', # version, raw coding string length
                   CHUNKID = '<B', # 0 = keyframe, 1 = points
                   KEYFRAME1 = '<B', # (type name)
-                  KEYFRAME2 = '<cIId', # (dtype, width,height,timestamp)
-                  POINTS1 = '<dI', # timestamp, n_pts
+                  KEYFRAME2 = '<cHHd', # (dtype, width,height,timestamp)
+                  POINTS1 = '<dH', # timestamp, n_pts
                   POINTS2 = '<HHHH', # x0, y0, w, h
                   ),
        }
+
 KEYFRAME_CHUNK = 0
 FRAME_CHUNK = 1
+INDEX_DICT_CHUNK = 2
 
 class NoMoreFramesException( Exception ):
     pass
@@ -90,6 +92,79 @@ def identify_ufmf_version(filename):
     version, = struct.unpack(VERSION_FMT, version_buf)
     fd.close()
     return version
+
+def _write_dict(fd,save_dict):
+    fd.write('d')
+    fd.write(chr(len(save_dict.keys())))
+    for key,value in save_dict.iteritems():
+        b = struct.pack('<H',len(key))
+        b += key
+        fd.write(b)
+        if isinstance(value,dict):
+            _write_dict(fd,value)
+        elif isinstance(value,list):
+            larr = np.array(value)
+            assert larr.ndim==1
+            dtype_char = larr.dtype.char
+            if dtype_char == 'd': # np.float
+                bytes_per_element = 8
+            elif dtype_char == 'l':
+                bytes_per_element = 8
+            else:
+                raise ValueError('unknown size for dtype %s'%(larr.dtype,))
+            b = 'a'+dtype_char+struct.pack('<L',len(larr)*bytes_per_element)
+            b += larr.tostring()
+            fd.write(b)
+        else:
+            raise ValueError("don't know how to save value %s"%(value,))
+
+def _read_min_chars(fd,keylen,buf_remaining):
+    if len(buf_remaining)>=keylen:
+        x = buf_remaining[:keylen]
+        buf_remaining = buf_remaining[keylen:]
+        return x,buf_remaining
+    else:
+        readlen = max(4096,keylen)
+        newbuf = fd.read(readlen)
+        buf_remaining = buf_remaining+newbuf
+        return _read_min_chars(fd,keylen,buf_remaining)
+
+def _read_array(fd,buf_remaining):
+    x,buf_remaining = _read_min_chars(fd,1,buf_remaining)
+    dtype_char = x
+
+    n_bytes_calcsize = struct.calcsize('<L')
+    x,buf_remaining = _read_min_chars(fd,n_bytes_calcsize,buf_remaining)
+    n_bytes_buf=x
+    n_bytes, = struct.unpack('<L',n_bytes_buf)
+
+    data_buf,buf_remaining = _read_min_chars(fd,n_bytes,buf_remaining)
+    larr = np.fromstring(data_buf,dtype=dtype_char)
+    return larr, buf_remaining
+
+def _read_dict(fd,buf_remaining=None):
+    if buf_remaining is None:
+        buf_remaining=''
+    x,buf_remaining = _read_min_chars(fd,1,buf_remaining)
+    n_keys = ord(x)
+    result = {}
+    Hsize = struct.calcsize('<H')
+    for key_num in range(n_keys):
+        x,buf_remaining = _read_min_chars(fd,Hsize,buf_remaining)
+        keylen, = struct.unpack('<H',x)
+        x,buf_remaining = _read_min_chars(fd,keylen,buf_remaining)
+        key = x
+        x,buf_remaining = _read_min_chars(fd,1,buf_remaining)
+        id = x
+        if id=='d':
+            value,buf_remaining = _read_dict(fd,buf_remaining)
+        elif id=='a':
+            value,buf_remaining = _read_array(fd,buf_remaining)
+        else:
+            raise ValueError("don't know how to read value with id %s"%(id,))
+        assert key not in value
+        result[key] = value
+    return result,buf_remaining
 
 def Ufmf(filename,**kwargs):
     """factory function to return UfmfBase class instance"""
@@ -234,7 +309,7 @@ class UfmfV1(UfmfBase):
 class UfmfV2(UfmfBase):
     """class to read .ufmf version 2 files"""
 
-    def __init__(self,file):
+    def __init__(self,file,mode='rb'):
         super(UfmfV2,self).__init__()
         self._fd_length = None
         if hasattr(file,'read'):
@@ -245,15 +320,31 @@ class UfmfV2(UfmfBase):
             # filename
             stat_result = os.stat(file)
             self._fd_length = stat_result[stat.ST_SIZE]
-            self._fd = open(file,mode='rb')
+            self._fd = open(file,mode=mode)
             self._file_opened=True
         self._fd_start = self._fd.tell()
 
         bufsz = struct.calcsize(FMT[2].HEADER)
         buf = self._fd_read( bufsz )
         intup = struct.unpack(FMT[2].HEADER, buf)
-        (self._version, coding_str_len) = intup
+        (self._version, index_location, coding_str_len) = intup
         self._coding = self._fd_read( coding_str_len )
+
+        if index_location == 0:
+            # no pre-existing index. generate it.
+            # save it.
+            raise NotImplementedError('x')
+        else:
+            # read index.'
+            self._seek(index_location)
+            buf = self._fd.read(4096)
+            id = buf[:1]
+            buf = buf[1:]
+            assert id=='d' # dictionary
+            self._index,buf_remaining = _read_dict(self._fd, buf_remaining=buf)
+            if len(buf_remaining)!=0:
+                raise ValueError('bytes after expected end of file')
+            raise NotImplementedError('reading from index not finished')
 
         # index of start pos of each frame chunk
         self._frame_locations = []
@@ -715,8 +806,9 @@ class UfmfSaverV2(UfmfSaverBase):
         else:
             self.file = open(file,mode="w+b")
             self._file_opened = True
+        self.coding = coding
         buf = struct.pack( FMT[2].HEADER,
-                           self.version, len(coding) )
+                           self.version, 0, len(self.coding) )
         self.file.write(buf)
         self.file.write(coding)
         self.max_width=max_width
@@ -732,6 +824,8 @@ class UfmfSaverV2(UfmfSaverBase):
             else:
                 warnings.warn('ufmf xinc_yinc set (1,1) because coding unknown')
         self.xinc, self.yinc = xinc_yinc
+        self._index = {'keyframe':collections.defaultdict(dict),
+                       'frame':{}}
         if frame0 is not None or timestamp0 is not None:
             self.add_keyframe('frame0',frame0,timestamp0)
 
@@ -750,12 +844,26 @@ class UfmfSaverV2(UfmfSaverBase):
         assert np_image_data.strides[1] == 1
         b =  chr(KEYFRAME_CHUNK) + chr(char2) + keyframe_type # chunkid, len(type), type
         b += struct.pack(FMT[2].KEYFRAME2,dtype,width,height,timestamp)
+        loc = self.file.tell()
+        tmp = self._index['keyframe'][keyframe_type]
+        if len(tmp)==0:
+            tmp['timestamp']=[]
+            tmp['loc']=[]
+        tmp['timestamp'].append(timestamp)
+        tmp['loc'].append(loc)
         self.file.write(b)
         self.file.write(buffer(np_image_data))
 
     def add_frame(self,origframe,timestamp,point_data):
         n_pts = len(point_data)
         b = chr(FRAME_CHUNK) + struct.pack(FMT[2].POINTS1, timestamp, n_pts)
+        loc = self.file.tell()
+        tmp = self._index['frame']
+        if len(tmp)==0:
+            tmp['timestamp']=[]
+            tmp['loc']=[]
+        tmp['timestamp'].append(timestamp)
+        tmp['loc'].append(loc)
         self.file.write(b)
         str_buf = []
         origframe = np.asarray(origframe)
@@ -801,5 +909,13 @@ class UfmfSaverV2(UfmfSaverBase):
 
     def close(self):
         if self._file_opened:
+            b = chr(INDEX_DICT_CHUNK)
+            self.file.write(b)
+            loc = self.file.tell()
+            _write_dict(self.file,self._index)
+            self.file.seek(0)
+            buf = struct.pack( FMT[2].HEADER,
+                               self.version, loc, len(self.coding) )
+            self.file.write(buf)
             self.file.close()
             self._file_opened = False
