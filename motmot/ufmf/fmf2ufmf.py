@@ -12,7 +12,6 @@ def doit(filename=None, output_filename=None, hide_gui=False):
                                        max_width=fmf.get_width(),
                                        max_height=fmf.get_height(),
                                        coding=fmf.get_format())
-    count = 0
     fake_point = ( fmf.get_width()//2, fmf.get_height()//2,
                    fmf.get_width(), fmf.get_height())
     points = [fake_point]
@@ -20,13 +19,9 @@ def doit(filename=None, output_filename=None, hide_gui=False):
         try:
             while 1:
                 frame, timestamp = fmf.get_next_frame()
-                count += 1
-
                 ufmf_writer.add_frame( frame, timestamp, points)
         except fmf_mod.NoMoreFramesException, err:
             pass
-    print 'converted %d frames'%count
-    print '%d frames in index'%(len(ufmf_writer._index['frame']['loc']),)
 
 def main():
     usage = """%prog FILENAME [options]"""

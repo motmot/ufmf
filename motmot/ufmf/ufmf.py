@@ -878,7 +878,7 @@ class UfmfSaverV1(UfmfSaverBase):
 class UfmfSaverV2(UfmfSaverBase):
     """class to write (save) .ufmf v2 files"""
     def __init__(self, file,
-                 coding=None,
+                 coding='MONO8',
                  frame0=None,
                  timestamp0=None,
                  max_width=None,
@@ -893,9 +893,7 @@ class UfmfSaverV2(UfmfSaverBase):
         else:
             self.file = open(file,mode="w+b")
             self._file_opened = True
-        assert coding is not None
         self.coding = coding
-        print 'saving with coding',coding
         if max_width is None or max_height is None:
             raise ValueError('max_width and max_height must be set')
         self.max_width=max_width
