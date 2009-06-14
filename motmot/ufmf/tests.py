@@ -7,7 +7,11 @@ ufmf_versions = [None,1,2] # None = default
 
 def test_a():
     for version in ufmf_versions:
-        for close_it in (True,False):
+        if version==1:
+            close_its = (True,)
+        else:
+            close_its = (True,False)
+        for close_it in close_its:
             yield check_a, version, close_it
 
 def check_a(version,close_it):
@@ -69,7 +73,11 @@ def check_a(version,close_it):
 def test_b():
     for seek in (True,False):
         for version in ufmf_versions:
-            for close_it in (True,False):
+            if version==1:
+                close_its = (True,)
+            else:
+                close_its = (True,False)
+            for close_it in close_its:
                 yield check_b, seek, version, close_it
 
 def check_b(seek_ok, version, close_it):
