@@ -129,6 +129,10 @@ class UFMFFviewSaver(traited_plugin.HasTraits_FViewPlugin):
 
             xpoints = realtime_analyzer.do_work( fibuf, timestamp, framenumber,
                                                  self.use_roi2)
+            if self.draw_points:
+                for pt in xpoints:
+                    draw_points.append( pt[:2])
+
             if self.saving:
                 ypoints = []
                 w = h = self.realtime_analyzer.roi_radius*2
@@ -138,7 +142,11 @@ class UFMFFviewSaver(traited_plugin.HasTraits_FViewPlugin):
                 actual_saved_points = self.ufmf.add_frame( fibuf,
                                                            timestamp,
                                                            ypoints )
-                if self.draw_points:
-                    for pt in ypoints:
-                        draw_points.append( pt[:2])
+                if self.draw_boxes:
+                    for pt in actual_saved_points:
+                        x0,y0, x1,y1 = pt
+                        draw_linesegs.extend( [(x0,y0, x0,y1),
+                                               (x0,y1, x1,y1),
+                                               (x1,y1, x1,y0),
+                                               (x1,y0, x0,y0)])
         return draw_points, draw_linesegs
