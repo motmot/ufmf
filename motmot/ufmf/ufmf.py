@@ -946,6 +946,7 @@ class UfmfSaverV2(UfmfSaverBase):
         str_buf = []
         origframe = np.asarray(origframe)
         origframe_h, origframe_w = origframe.shape
+        saved_points = []
         if len(point_data):
             for this_point_data in point_data:
                 xidx, yidx, w, h = this_point_data[:4]
@@ -981,9 +982,11 @@ class UfmfSaverV2(UfmfSaverBase):
                 this_str_head = struct.pack(FMT[2].POINTS2, xmin, ymin, w, h)
 
                 str_buf.append( this_str_head + this_str_buf )
+                saved_points.append( (xmin,ymin, xmax,ymax) )
             fullstr = ''.join(str_buf)
             self.file.write(fullstr)
         self.last_timestamp = timestamp
+        return saved_points
 
     def close(self):
         if self._file_opened:
