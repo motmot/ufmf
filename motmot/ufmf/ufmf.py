@@ -479,7 +479,7 @@ class UfmfV2(UfmfBase):
                 self._fd.write(buf)
             except IOError, err:
                 warnings.warn('IO error when trying to save .ufmf index '
-                              'for %s'%file)
+                              'for %s (was .ufmf file opened read-only?)'%file)
         else:
             # read index
             self._seek(index_location)
