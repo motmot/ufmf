@@ -468,7 +468,7 @@ class UfmfV2(UfmfBase):
             self._fd.seek(loc)
             try:
                 b = chr(INDEX_DICT_CHUNK)
-                self.file.write(b)
+                self._fd.write(b)
                 loc = self._fd.tell()
                 _write_dict( self._fd, self._index )
                 self._fd.seek(0)
