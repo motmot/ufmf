@@ -7,9 +7,10 @@ ufmf_versions = [None,1,2] # None = default
 
 def test_a():
     for version in ufmf_versions:
-        yield check_a, version
+        for close_it in (True,False):
+            yield check_a, version, close_it
 
-def check_a(version):
+def check_a(version,close_it):
     if 1: # indent to match old code organization
         w = 640
         h = 480
@@ -53,7 +54,8 @@ def check_a(version):
 
             us.add_frame( frame2, timestamp2, pts )
 
-            us.close()
+            if close_it:
+                us.close()
 
             us2 = ufmf.Ufmf(filename)
             assert isinstance(us2,ufmf.UfmfBase)
@@ -67,9 +69,10 @@ def check_a(version):
 def test_b():
     for seek in (True,False):
         for version in ufmf_versions:
-            yield check_b, seek, version
+            for close_it in (True,False):
+                yield check_b, seek, version, close_it
 
-def check_b(seek_ok, version):
+def check_b(seek_ok, version, close_it):
     if 1: # indent to match old code organization
         w = 752
         h = 240
@@ -119,7 +122,8 @@ def check_b(seek_ok, version):
             for pts in all_pts:
                 timestamp += 1
                 us.add_frame( frame2, timestamp, pts )
-            us.close()
+            if close_it:
+                us.close()
 
             us2 = ufmf.Ufmf(filename,seek_ok=seek_ok)
             assert isinstance(us2,ufmf.UfmfBase)
