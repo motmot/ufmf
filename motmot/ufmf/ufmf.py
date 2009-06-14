@@ -381,15 +381,9 @@ class _UFmfV2Indexer(object):
         self._points2_sz = struct.calcsize(FMT[2].POINTS2)
 
         self.r = _UFmfV2LowLevelReader(self._fd)
-        print 'creating index...'
-        print 'self._create_index',self._create_index
         self._create_index()
-        print '__init__: self._index',self._index
-        print 'have index'
 
     def get_index(self):
-        print 'returning index'
-        print 'get_index: self._index',self._index
         result = {'frame':self._index['frame']}
         # remove defaultdict and convert to dict
         result['keyframe'] = {}
@@ -401,18 +395,14 @@ class _UFmfV2Indexer(object):
         return self._index_chunk_location
 
     def _create_index(self):
-        print 'xxx'
         self._index = {'keyframe':collections.defaultdict(dict),
                        'frame':dict(timestamp=[],
                                     loc=[])}
-        print '_create_index: 1: self._index',self._index
-
         while 1:
             chunk_id, result = self._index_next_chunk()
             if chunk_id is None:
                 break # no more frames
         self._index_chunk_location = self._fd.tell()
-        print '_create_index: 2: self._index',self._index
 
     def _index_next_chunk(self):
         loc = self._fd.tell()
@@ -467,7 +457,6 @@ class UfmfV2(UfmfBase):
          self._max_width, self._max_height,
          coding_str_len) = intup
         self._coding = self._r._fd_read( coding_str_len )
-        print 'loaded coding',self._coding
         self._next_frame = 0
 
         if index_location == 0:
@@ -622,7 +611,6 @@ class FlyMovieEmulator(object):
             last_frame = len(self._fno2loc)
             return last_frame+1
         else:
-            print 'n frames: %d'%self._ufmf.get_number_of_frames()
             return self._ufmf.get_number_of_frames()
 
     def get_format(self):
