@@ -503,6 +503,14 @@ class UfmfV2(UfmfBase):
         self._points1_sz = struct.calcsize(FMT[2].POINTS1)
         self._points2_sz = struct.calcsize(FMT[2].POINTS2)
 
+    def get_keyframe_for_timestamp(self, keyframe_type, timestamp):
+        """return the oldest keyframe before or at the time of timestamp"""
+        ts = self._index['keyframe'][keyframe_type]['timestamp']
+        cond = timestamp >= ts
+        idxs = np.nonzero(cond)[0]
+        idx = idxs[0]
+        return self._get_keyframe_N(keyframe_type,idx)
+
     def get_number_of_frames(self):
         """return the number of frames"""
         return len(self._index['frame']['loc'])
@@ -678,10 +686,12 @@ class FlyMovieEmulator(object):
                     if self._last_frame is None:
                         self._last_frame = numpy.array(self._bg0,copy=True)
             else:
-                warnings.warn('UfmfV2 fmf emulator filling bg with white')
-                w,h=self._ufmf.get_max_size()
-                self._last_frame = numpy.empty((h,w),dtype=np.uint8)
-                self._last_frame.fill(255)
+                tmp,im_timestamp=self._ufmf.get_keyframe_for_timestamp('mean',timestamp)
+                if _return_more:
+                    raise NotImplementedError('TODO: FIXME, XXX')
+                mean_image = tmp
+                self._last_frame = np.array(mean_image,copy=True).astype(np.uint8)
+                more['mean'] = mean_image
             have_frame = True
             more['regions'] = regions
             for xmin,ymin,bufim in regions:
