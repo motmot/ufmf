@@ -997,16 +997,16 @@ class UfmfSaverV2(UfmfSaverBase):
         return saved_points
 
     def close(self):
+        b = chr(INDEX_DICT_CHUNK)
+        self.file.write(b)
+        loc = self.file.tell()
+        _write_dict(self.file,self._index)
+        self.file.seek(0)
+        buf = struct.pack( FMT[2].HEADER,
+                           self.version, loc,
+                           self.max_width, self.max_height,
+                           len(self.coding) )
+        self.file.write(buf)
         if self._file_opened:
-            b = chr(INDEX_DICT_CHUNK)
-            self.file.write(b)
-            loc = self.file.tell()
-            _write_dict(self.file,self._index)
-            self.file.seek(0)
-            buf = struct.pack( FMT[2].HEADER,
-                               self.version, loc,
-                               self.max_width, self.max_height,
-                               len(self.coding) )
-            self.file.write(buf)
             self.file.close()
             self._file_opened = False
