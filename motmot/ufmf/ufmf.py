@@ -402,6 +402,14 @@ class _UFmfV2Indexer(object):
             chunk_id, result = self._index_next_chunk()
             if chunk_id is None:
                 break # no more frames
+        # convert to arrays
+        for keyframe_type in self._index['keyframe'].keys():
+            for key in self._index['keyframe'][keyframe_type].keys():
+                self._index['keyframe'][keyframe_type][key]=np.array(
+                    self._index['keyframe'][keyframe_type][key])
+        for key in self._index['frame'].keys():
+            self._index['frame'][key]=np.array(
+                self._index['frame'][key])
         self._index_chunk_location = self._fd.tell()
 
     def _index_next_chunk(self):
