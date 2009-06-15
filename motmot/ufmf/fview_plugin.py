@@ -17,7 +17,7 @@ import os,sys
 
 class UFMFFviewSaver(traited_plugin.HasTraits_FViewPlugin):
     plugin_name = 'ufmf saver'
-    enabled = traits.Bool(True)
+    enabled = traits.Bool(False)
 
     saving = traits.Bool(False)
     start_saving = traits.Button()
