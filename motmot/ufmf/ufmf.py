@@ -697,7 +697,13 @@ class FlyMovieEmulator(object):
                     if self._last_frame is None:
                         self._last_frame = numpy.array(self._bg0,copy=True)
             else:
-                tmp,im_timestamp=self._ufmf.get_keyframe_for_timestamp('mean',timestamp)
+                try:
+                    tmp,im_timestamp=self._ufmf.get_keyframe_for_timestamp('mean',timestamp)
+                except KeyError:
+                    warnings.warn('UfmfV2 fmf emulator filling bg with white')
+                    w,h=self._ufmf.get_max_size()
+                    tmp = numpy.empty((h,w),dtype=np.uint8)
+                    tmp.fill(255)
                 if _return_more:
                     raise NotImplementedError('TODO: FIXME, XXX')
                 mean_image = tmp
