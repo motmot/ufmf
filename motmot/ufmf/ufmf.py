@@ -920,14 +920,20 @@ class UfmfSaverV2(UfmfSaverBase):
         np_image_data = numpy.asarray(image_data)
         if np_image_data.dtype == np.uint8:
             dtype = 'B'
+            strides1=1
         elif np_image_data.dtype == np.float32:
             dtype = 'f'
+            strides1=4
         else:
             raise ValueError('dtype %s not supported'%image_data.dtype)
         assert np_image_data.ndim == 2
         height, width = np_image_data.shape
-        assert np_image_data.strides[0] == width
-        assert np_image_data.strides[1] == 1
+        try:
+            assert np_image_data.strides[0] == width*np_image_data.strides[1]
+            assert np_image_data.strides[1] == strides1
+        except:
+            print 'np_image_data.strides, width',np_image_data.strides, width
+            raise
         b =  chr(KEYFRAME_CHUNK) + chr(char2) + keyframe_type # chunkid, len(type), type
         b += struct.pack(FMT[2].KEYFRAME2,dtype,width,height,timestamp)
         loc = self.file.tell()
