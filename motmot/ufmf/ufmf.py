@@ -21,13 +21,12 @@ class BaseDict(dict):
     def __setattr__(self,name,value):
         self[name]=value
 
-VERSION_FMT = '<I' # always the first bytes
 FMT = {1:BaseDict(HEADER = '<IIdII', # version, ....
                   CHUNKHEADER = '<dI',
                   SUBHEADER = '<II',
                   TIMESTAMP = 'd', # XXX struct.pack('<d',nan) dies
                   ),
-       2:BaseDict(HEADER = '<ILHHB', # version, index location, max w, max h, raw coding string length
+       2:BaseDict(HEADER = '<4sILHHB', # 'ufmf', version, index location, max w, max h, raw coding string length
                   CHUNKID = '<B', # 0 = keyframe, 1 = points
                   KEYFRAME1 = '<B', # (type name)
                   KEYFRAME2 = '<cHHd', # (dtype, width,height,timestamp)
@@ -87,9 +86,20 @@ class UfmfParser(object):
 def identify_ufmf_version(filename):
     mode = "rb"
     fd = open(filename,mode=mode)
+    VERSION_FMT = '<I' # always the first bytes
     version_buflen = struct.calcsize(VERSION_FMT)
     version_buf = fd.read( version_buflen )
+    had_marker=False
+    if version_buf=='ufmf':
+        version_buf = fd.read( version_buflen )
+        had_marker=True
     version, = struct.unpack(VERSION_FMT, version_buf)
+    if version>1:
+        if not had_marker:
+            raise ValueError('ill-formed .ufmf file')
+    if version==1:
+        if had_marker:
+            raise ValueError('ill-formed .ufmf file')
     fd.close()
     return version
 
@@ -461,9 +471,10 @@ class UfmfV2(UfmfBase):
         bufsz = struct.calcsize(FMT[2].HEADER)
         buf = self._r._fd_read( bufsz )
         intup = struct.unpack(FMT[2].HEADER, buf)
-        (self._version, index_location,
+        (ufmf_str, self._version, index_location,
          self._max_width, self._max_height,
          coding_str_len) = intup
+        assert ufmf_str=='ufmf'
         self._coding = self._r._fd_read( coding_str_len )
         self._next_frame = 0
 
@@ -480,7 +491,7 @@ class UfmfV2(UfmfBase):
                 loc = self._fd.tell()
                 _write_dict( self._fd, self._index )
                 self._fd.seek(0)
-                buf = struct.pack( FMT[2].HEADER,
+                buf = struct.pack( FMT[2].HEADER, 'ufmf',
                                    self._version, loc,
                                    self._max_width, self._max_height,
                                    len(self._coding) )
@@ -904,7 +915,7 @@ class UfmfSaverV2(UfmfSaverBase):
             raise ValueError('max_width and max_height must be set')
         self.max_width=max_width
         self.max_height=max_height
-        buf = struct.pack( FMT[2].HEADER,
+        buf = struct.pack( FMT[2].HEADER, 'ufmf',
                            self.version, 0, self.max_width, self.max_height,
                            len(self.coding) )
         self.file.write(buf)
@@ -1018,7 +1029,7 @@ class UfmfSaverV2(UfmfSaverBase):
         loc = self.file.tell()
         _write_dict(self.file,self._index)
         self.file.seek(0)
-        buf = struct.pack( FMT[2].HEADER,
+        buf = struct.pack( FMT[2].HEADER, 'ufmf',
                            self.version, loc,
                            self.max_width, self.max_height,
                            len(self.coding) )
