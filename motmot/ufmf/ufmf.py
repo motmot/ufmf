@@ -514,6 +514,9 @@ class UfmfV2(UfmfBase):
         self._points1_sz = struct.calcsize(FMT[2].POINTS1)
         self._points2_sz = struct.calcsize(FMT[2].POINTS2)
 
+    def get_index(self):
+        return self._index
+
     def get_keyframe_for_timestamp(self, keyframe_type, timestamp):
         """return the oldest keyframe before or at the time of timestamp"""
         ts = self._index['keyframe'][keyframe_type]['timestamp']
