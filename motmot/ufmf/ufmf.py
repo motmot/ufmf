@@ -445,11 +445,16 @@ class _UFmfV2Indexer(object):
             tmp['timestamp'].append(timestamp)
             tmp['loc'].append(loc)
         elif chunk_id==INDEX_DICT_CHUNK:
-            raise RuntimeError('indexer encountered index?')
+            raise PreexistingIndexExists('indexer encountered index',loc=loc)
         else:
             raise ValueError('unexpected byte %d where chunk ID expected'%(
                 chunk_id,))
         return chunk_id, result
+
+class PreexistingIndexExists(Exception):
+    def __init__(self,mystr,loc=None):
+        super(PreexistingIndexExists,self).__init__(mystr)
+        self.loc = loc
 
 class UfmfV2(UfmfBase):
     """class to read .ufmf version 2 files"""
