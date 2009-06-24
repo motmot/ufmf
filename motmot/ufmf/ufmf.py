@@ -116,7 +116,7 @@ def _write_dict(fd,save_dict):
             larr = np.array(value)
             assert larr.ndim==1
             dtype_char = larr.dtype.char
-            bytes_per_element = larr.dtype.char.itemsize
+            bytes_per_element = larr.dtype.itemsize
             b = 'a'+dtype_char+struct.pack('<L',len(larr)*bytes_per_element)
             b += larr.tostring()
             fd.write(b)
