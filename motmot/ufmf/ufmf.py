@@ -116,12 +116,7 @@ def _write_dict(fd,save_dict):
             larr = np.array(value)
             assert larr.ndim==1
             dtype_char = larr.dtype.char
-            if dtype_char == 'd': # np.float
-                bytes_per_element = 8
-            elif dtype_char == 'l':
-                bytes_per_element = 8
-            else:
-                raise ValueError('unknown size for dtype %s'%(larr.dtype,))
+            bytes_per_element = larr.dtype.char.itemsize
             b = 'a'+dtype_char+struct.pack('<L',len(larr)*bytes_per_element)
             b += larr.tostring()
             fd.write(b)
