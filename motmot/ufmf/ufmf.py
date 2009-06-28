@@ -116,12 +116,7 @@ def _write_dict(fd,save_dict):
             larr = np.array(value)
             assert larr.ndim==1
             dtype_char = larr.dtype.char
-            if dtype_char == 'd': # np.float
-                bytes_per_element = 8
-            elif dtype_char == 'l':
-                bytes_per_element = 8
-            else:
-                raise ValueError('unknown size for dtype %s'%(larr.dtype,))
+            bytes_per_element = larr.dtype.itemsize
             b = 'a'+dtype_char+struct.pack('<L',len(larr)*bytes_per_element)
             b += larr.tostring()
             fd.write(b)
@@ -445,11 +440,16 @@ class _UFmfV2Indexer(object):
             tmp['timestamp'].append(timestamp)
             tmp['loc'].append(loc)
         elif chunk_id==INDEX_DICT_CHUNK:
-            raise RuntimeError('indexer encountered index?')
+            raise PreexistingIndexExists('indexer encountered index',loc=loc)
         else:
             raise ValueError('unexpected byte %d where chunk ID expected'%(
                 chunk_id,))
         return chunk_id, result
+
+class PreexistingIndexExists(Exception):
+    def __init__(self,mystr,loc=None):
+        super(PreexistingIndexExists,self).__init__(mystr)
+        self.loc = loc
 
 class UfmfV2(UfmfBase):
     """class to read .ufmf version 2 files"""
