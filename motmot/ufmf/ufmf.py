@@ -109,7 +109,10 @@ def identify_ufmf_version(filename):
 def _write_dict(fd,save_dict):
     fd.write('d')
     fd.write(chr(len(save_dict.keys())))
-    for key,value in save_dict.iteritems():
+    keys = save_dict.keys()
+    keys.sort() # keep ordering fixed to file remains same if re-indexed
+    for key in keys:
+        value = save_dict[key]
         b = struct.pack('<H',len(key))
         b += key
         fd.write(b)
