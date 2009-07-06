@@ -22,5 +22,6 @@ setup(name='motmot.ufmf',
                     ],
     'motmot.fview.plugins':
     'fview_ufmf_saver = motmot.ufmf.fview_plugin:UFMFFviewSaver',
-    }
+    },
+      test_suite = 'nose.collector',
       )
