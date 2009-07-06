@@ -15,7 +15,13 @@ import math
 
 import motmot.FlyMovieFormat.FlyMovieFormat as FMF
 
-class ShortUFMFFileError(Exception):
+class UfmfError(Exception):
+    pass
+
+class ShortUFMFFileError(UfmfError):
+    pass
+
+class CorruptIndexError(UfmfError):
     pass
 
 class BaseDict(dict):
@@ -621,8 +627,8 @@ class UfmfV3(UfmfBase):
                 if len(buf_remaining)!=0:
                     raise ValueError('bytes after expected end of file')
             except:
-                raise ValueError('the index of the .ufmf file is corrupt. '
-                                 '(Hint: Try the ufmf_reindex command.)')
+                raise CorruptIndexError('the .ufmf index is corrupt. '
+                                        '(Hint: Try the ufmf_reindex command.)')
 
         self._keyframe2_sz = struct.calcsize(FMT[self._version].KEYFRAME2)
         self._points1_sz = struct.calcsize(FMT[self._version].POINTS1)
