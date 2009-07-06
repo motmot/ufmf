@@ -29,7 +29,8 @@ FMT = {1:BaseDict(HEADER = '<IIdII', # version, ....
                   SUBHEADER = '<II',
                   TIMESTAMP = 'd', # XXX struct.pack('<d',nan) dies
                   ),
-       2:BaseDict(HEADER = '<4sILHHB', # 'ufmf', version, index location, max w, max h, raw coding string length
+       2:BaseDict(HEADER = '<4sILHHB', # 'ufmf', version, index location,
+                                       # max w, max h, raw coding string length
                   CHUNKID = '<B', # 0 = keyframe, 1 = points
                   KEYFRAME1 = '<B', # (type name)
                   KEYFRAME2 = '<cHHd', # (dtype, width,height,timestamp)
