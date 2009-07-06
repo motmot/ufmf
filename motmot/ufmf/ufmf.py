@@ -563,11 +563,15 @@ class UfmfV2(UfmfBase):
             # next char is 'd' for dict
             id = buf[:1]
             buf = buf[1:]
-            assert id=='d' # dictionary
+            try:
+                assert id=='d' # dictionary
 
-            self._index,buf_remaining = _read_dict(self._fd, buf_remaining=buf)
-            if len(buf_remaining)!=0:
-                raise ValueError('bytes after expected end of file')
+                self._index,buf_remaining = _read_dict(self._fd, buf_remaining=buf)
+                if len(buf_remaining)!=0:
+                    raise ValueError('bytes after expected end of file')
+            except:
+                raise ValueError('the index of the .ufmf file is corrupt. '
+                                 '(Hint: Try the ufmf_reindex command.)')
 
         self._keyframe2_sz = struct.calcsize(FMT[2].KEYFRAME2)
         self._points1_sz = struct.calcsize(FMT[2].POINTS1)
