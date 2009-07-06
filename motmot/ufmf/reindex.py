@@ -3,7 +3,7 @@ from optparse import OptionParser
 import tempfile, os, shutil
 import numpy as np
 
-def reindex(filename,short_file_ok=False):
+def reindex(filename,short_file_ok=False,progress=False):
     version = ufmf.identify_ufmf_version(filename)
     if version == 1:
         raise ValueError('.ufmf v1 files have no index')
@@ -13,17 +13,25 @@ def reindex(filename,short_file_ok=False):
                       short_file_ok=short_file_ok,
                       raise_write_errors=True,
                       mode='rb+',
+                      index_progress=progress,
                       )
     except ufmf.ShortUFMFFileError, err:
         raise ValueError('this file appears to be short. '
                          '(Hint: Retry with the --short-file-ok option.)')
 
 def main():
-    usage = '%prog FILE [options]'
+    usage = """%prog FILE [options]
+
+Re-index the .ufmf file named FILE and save the index into the FILE.
+
+This can be used to fix corrupt .ufmf indexes.
+"""
 
     parser = OptionParser(usage)
     parser.add_option("--short-file-ok", action='store_true', default=False,
                       help="don't fail on files that appear to be truncated")
+    parser.add_option("--progress", action='store_true', default=False,
+                      help="show a progress bar while indexing file")
     (options, args) = parser.parse_args()
 
     if len(args)<1:
@@ -33,7 +41,10 @@ def main():
     filename = args[0]
     version = ufmf.identify_ufmf_version(filename)
     assert version != 1, 'v1 .ufmf files have no index to remove'
-    reindex(filename,short_file_ok=options.short_file_ok)
+    reindex(filename,
+            short_file_ok=options.short_file_ok,
+            progress=options.progress,
+            )
 
 def _make_temp_ufmf_file():
     tmp_fd,filename = tempfile.mkstemp()

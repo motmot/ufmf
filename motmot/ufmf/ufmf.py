@@ -386,7 +386,11 @@ class _UFmfV2LowLevelReader(object):
 
 class _UFmfV2Indexer(object):
     """create an index from an un-unindexed .ufmf v2 file"""
-    def __init__(self,fd, ignore_preexisting_index=False, short_file_ok=False):
+    def __init__(self,fd, 
+                 ignore_preexisting_index=False, 
+                 short_file_ok=False,
+                 index_progress=False,
+                 ):
         self._fd = fd
 
         self._keyframe2_sz = struct.calcsize(FMT[2].KEYFRAME2)
@@ -397,6 +401,7 @@ class _UFmfV2Indexer(object):
         self._short_file_ok = short_file_ok
         self._index_chunk_location = None
         self._ignore_preexisting_index = ignore_preexisting_index
+        self._index_progress = index_progress
         self._create_index()
 
     def get_index(self):
@@ -414,10 +419,27 @@ class _UFmfV2Indexer(object):
         self._index = {'keyframe':collections.defaultdict(dict),
                        'frame':dict(timestamp=[],
                                     loc=[])}
+        if self._index_progress:
+            import progressbar
+            
+            widgets=['indexing: ', progressbar.Percentage(), ' ',
+                     progressbar.Bar(), ' ', progressbar.ETA()]
+            cur_pos = self._fd.tell()
+            # find file size (use seek not stat because we may not know name)
+            try:
+                self._fd.seek(0,os.SEEK_END) # last byte
+                final_pos = self._fd.tell()
+            finally:
+                self._fd.seek(cur_pos)
+            pbar=progressbar.ProgressBar(widgets=widgets,maxval=final_pos).start()
         while 1:
+            if self._index_progress:
+                pbar.update(self._fd.tell())
             chunk_id, result = self._index_next_chunk()
             if chunk_id is None:
                 break # no more frames
+        if self._index_progress:
+            pbar.finish()
         # convert to arrays
         for keyframe_type in self._index['keyframe'].keys():
             for key in self._index['keyframe'][keyframe_type].keys():
@@ -483,6 +505,7 @@ class UfmfV2(UfmfBase):
                  ignore_preexisting_index=False,
                  short_file_ok=False,
                  raise_write_errors=False,
+                 index_progress=False,
                  ):
         """
         **Arguments**
@@ -498,6 +521,8 @@ class UfmfV2(UfmfBase):
             Whether to ignore short file errors
         raise_write_errors : boolean
             Whether to ignore short file errors
+        index_progress : boolean
+            Whether to display a text-based progressbar while indexing
         """
         super(UfmfV2,self).__init__()
         if hasattr(file,'read'):
@@ -531,6 +556,7 @@ class UfmfV2(UfmfBase):
                 self._fd,
                 ignore_preexisting_index=ignore_preexisting_index,
                 short_file_ok=short_file_ok,
+                index_progress=index_progress,
                 )
             self._index = tmp.get_index()
             loc = tmp.get_expected_index_chunk_location()
