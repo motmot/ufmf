@@ -29,6 +29,17 @@ FMT = {1:BaseDict(HEADER = '<IIdII', # version, ....
                   SUBHEADER = '<II',
                   TIMESTAMP = 'd', # XXX struct.pack('<d',nan) dies
                   ),
+
+       3:BaseDict(HEADER = '<4sIQHHB', # 'ufmf', version, index location,
+                                       # max w, max h, raw coding string length
+                  CHUNKID = '<B', # 0 = keyframe, 1 = points
+                  KEYFRAME1 = '<B', # (type name)
+                  KEYFRAME2 = '<cHHd', # (dtype, width,height,timestamp)
+                  POINTS1 = '<dH', # timestamp, n_pts
+                  POINTS2 = '<HHHH', # x0, y0, w, h
+                  ),
+
+       # Format 2 is the same as format 3, but the index must be at < 4 GB
        2:BaseDict(HEADER = '<4sILHHB', # 'ufmf', version, index location,
                                        # max w, max h, raw coding string length
                   CHUNKID = '<B', # 0 = keyframe, 1 = points
@@ -188,6 +199,10 @@ def Ufmf(filename,**kwargs):
         if 'seek_ok' in kwargs:
             kwargs.pop('seek_ok')
         return UfmfV2(filename,**kwargs)
+    elif version==3:
+        if 'seek_ok' in kwargs:
+            kwargs.pop('seek_ok')
+        return UfmfV3(filename,**kwargs)
     else:
         raise ValueError('unknown .ufmf version %d'%version)
 
@@ -319,13 +334,14 @@ class UfmfV1(UfmfBase):
     def close(self):
         self._fd.close()
 
-class _UFmfV2LowLevelReader(object):
-    def __init__(self,fd):
+class _UFmfV3LowLevelReader(object):
+    def __init__(self,fd,version):
         self._fd = fd
+        self._version = version
 
-        self._keyframe2_sz = struct.calcsize(FMT[2].KEYFRAME2)
-        self._points1_sz = struct.calcsize(FMT[2].POINTS1)
-        self._points2_sz = struct.calcsize(FMT[2].POINTS2)
+        self._keyframe2_sz = struct.calcsize(FMT[self._version].KEYFRAME2)
+        self._points1_sz =   struct.calcsize(FMT[self._version].POINTS1)
+        self._points2_sz =   struct.calcsize(FMT[self._version].POINTS2)
 
     def _read_keyframe_chunk(self):
         """read keyframe chunk from just after chunk_id byte
@@ -336,7 +352,7 @@ class _UFmfV2LowLevelReader(object):
         len_type = ord(self._fd_read(1))
         keyframe_type = self._fd_read(len_type)
         assert len(keyframe_type)==len_type
-        intup = struct.unpack(FMT[2].KEYFRAME2,
+        intup = struct.unpack(FMT[self._version].KEYFRAME2,
                               self._fd_read(self._keyframe2_sz))
         dtype_char,width,height,timestamp=intup
 
@@ -361,13 +377,13 @@ class _UFmfV2LowLevelReader(object):
         start_location is the file locate at which the chunk started
         (i.e. curpos-1)
         """
-        intup = struct.unpack(FMT[2].POINTS1,
+        intup = struct.unpack(FMT[self._version].POINTS1,
                               self._fd_read(self._points1_sz))
         timestamp, n_pts = intup
 
         regions = []
         for ptno in range(n_pts):
-            intup = struct.unpack(FMT[2].POINTS2,
+            intup = struct.unpack(FMT[self._version].POINTS2,
                                   self._fd_read(self._points2_sz))
             (xmin, ymin, w, h) = intup
             lenbuf = w*h
@@ -385,20 +401,21 @@ class _UFmfV2LowLevelReader(object):
                     n_bytes,len(buf)))
         return buf
 
-class _UFmfV2Indexer(object):
-    """create an index from an un-unindexed .ufmf v2 file"""
-    def __init__(self,fd, 
+class _UFmfV3Indexer(object):
+    """create an index from an un-unindexed .ufmf v3 file"""
+    def __init__(self,fd, version,
                  ignore_preexisting_index=False, 
                  short_file_ok=False,
                  index_progress=False,
                  ):
         self._fd = fd
+        self._version = version
 
-        self._keyframe2_sz = struct.calcsize(FMT[2].KEYFRAME2)
-        self._points1_sz = struct.calcsize(FMT[2].POINTS1)
-        self._points2_sz = struct.calcsize(FMT[2].POINTS2)
+        self._keyframe2_sz = struct.calcsize(FMT[self._version].KEYFRAME2)
+        self._points1_sz = struct.calcsize(FMT[self._version].POINTS1)
+        self._points2_sz = struct.calcsize(FMT[self._version].POINTS2)
 
-        self.r = _UFmfV2LowLevelReader(self._fd)
+        self.r = _UFmfV3LowLevelReader(self._fd, self._version)
         self._short_file_ok = short_file_ok
         self._index_chunk_location = None
         self._ignore_preexisting_index = ignore_preexisting_index
@@ -498,8 +515,10 @@ class PreexistingIndexExists(Exception):
         super(PreexistingIndexExists,self).__init__(mystr)
         self.loc = loc
 
-class UfmfV2(UfmfBase):
-    """class to read .ufmf version 2 files"""
+class UfmfV3(UfmfBase):
+    """class to read .ufmf version 3 files"""
+    def _get_interface_version(self):
+        return 3
 
     def __init__(self,file,
                  mode='rb',
@@ -525,7 +544,7 @@ class UfmfV2(UfmfBase):
         index_progress : boolean
             Whether to display a text-based progressbar while indexing
         """
-        super(UfmfV2,self).__init__()
+        super(UfmfV3,self).__init__()
         if hasattr(file,'read'):
             # file-like object
             self._file_opened=False
@@ -536,15 +555,17 @@ class UfmfV2(UfmfBase):
             self._fd = open(file,mode=mode)
             self._file_opened=True
 
-        self._r = _UFmfV2LowLevelReader(self._fd)
+        expected_version = self._get_interface_version()
+        self._r = _UFmfV3LowLevelReader(self._fd,expected_version)
 
-        bufsz = struct.calcsize(FMT[2].HEADER)
+        bufsz = struct.calcsize(FMT[expected_version].HEADER)
         buf = self._r._fd_read( bufsz )
-        intup = struct.unpack(FMT[2].HEADER, buf)
+        intup = struct.unpack(FMT[expected_version].HEADER, buf)
         (ufmf_str, self._version, index_location,
          self._max_width, self._max_height,
          coding_str_len) = intup
         assert ufmf_str=='ufmf'
+        assert expected_version==self._version
         self._coding = self._r._fd_read( coding_str_len )
         self._next_frame = 0
         if ignore_preexisting_index:
@@ -553,8 +574,8 @@ class UfmfV2(UfmfBase):
         if index_location == 0:
             # no pre-existing index. generate it.
             # save it.
-            tmp = _UFmfV2Indexer(
-                self._fd,
+            tmp = _UFmfV3Indexer(
+                self._fd, self._version,
                 ignore_preexisting_index=ignore_preexisting_index,
                 short_file_ok=short_file_ok,
                 index_progress=index_progress,
@@ -572,7 +593,7 @@ class UfmfV2(UfmfBase):
                 _write_dict( self._fd, self._index )
                 self._fd.truncate()
                 self._fd.seek(0)
-                buf = struct.pack( FMT[2].HEADER, 'ufmf',
+                buf = struct.pack( FMT[self._version].HEADER, 'ufmf',
                                    self._version, index_dict_location,
                                    self._max_width, self._max_height,
                                    len(self._coding) )
@@ -603,9 +624,9 @@ class UfmfV2(UfmfBase):
                 raise ValueError('the index of the .ufmf file is corrupt. '
                                  '(Hint: Try the ufmf_reindex command.)')
 
-        self._keyframe2_sz = struct.calcsize(FMT[2].KEYFRAME2)
-        self._points1_sz = struct.calcsize(FMT[2].POINTS1)
-        self._points2_sz = struct.calcsize(FMT[2].POINTS2)
+        self._keyframe2_sz = struct.calcsize(FMT[self._version].KEYFRAME2)
+        self._points1_sz = struct.calcsize(FMT[self._version].POINTS1)
+        self._points2_sz = struct.calcsize(FMT[self._version].POINTS2)
 
     def get_index(self):
         return self._index
@@ -673,6 +694,11 @@ class UfmfV2(UfmfBase):
         if self._file_opened:
             self._fd.close()
             self._file_opened = False
+
+class UfmfV2(UfmfV3):
+    """class to read .ufmf version 2 files"""
+    def _get_interface_version(self):
+        return 2
 
 class NoSuchFrameError(IndexError):
     pass
@@ -796,7 +822,7 @@ class FlyMovieEmulator(object):
                 try:
                     tmp,im_timestamp=self._ufmf.get_keyframe_for_timestamp('mean',timestamp)
                 except KeyError:
-                    warnings.warn('UfmfV2 fmf emulator filling bg with white')
+                    warnings.warn('UfmfV3 fmf emulator filling bg with white')
                     w,h=self._ufmf.get_max_size()
                     tmp = numpy.empty((h,w),dtype=np.uint8)
                     tmp.fill(255)
@@ -903,7 +929,7 @@ def UfmfSaver( file,
                timestamp0=None,
                **kwargs):
     """factory function to return UfmfSaverBase instance"""
-    default_version = 2
+    default_version = 3
     version = kwargs.pop('version',default_version)
     if version is None:
         version = default_version
@@ -912,6 +938,8 @@ def UfmfSaver( file,
         return UfmfSaverV1(file,frame0,timestamp0,**kwargs)
     elif version==2:
         return UfmfSaverV2(file,frame0=frame0,timestamp0=timestamp0,**kwargs)
+    elif version==3:
+        return UfmfSaverV3(file,frame0=frame0,timestamp0=timestamp0,**kwargs)
     else:
         raise ValueError('unknown version %s'%version)
 
@@ -994,8 +1022,11 @@ class UfmfSaverV1(UfmfSaverBase):
         if hasattr(self,'file'):
             self.close()
 
-class UfmfSaverV2(UfmfSaverBase):
-    """class to write (save) .ufmf v2 files"""
+class UfmfSaverV3(UfmfSaverBase):
+    """class to write (save) .ufmf v3 files"""
+    def _get_interface_version(self):
+        return 3
+
     def __init__(self, file,
                  coding='MONO8',
                  frame0=None,
@@ -1004,7 +1035,7 @@ class UfmfSaverV2(UfmfSaverBase):
                  max_height=None,
                  xinc_yinc=None,
                  ):
-        super(UfmfSaverV2,self).__init__(2)
+        super(UfmfSaverV3,self).__init__(self._get_interface_version())
         if hasattr(file,'write'):
             # file-like object
             self.file = file
@@ -1017,7 +1048,7 @@ class UfmfSaverV2(UfmfSaverBase):
             raise ValueError('max_width and max_height must be set')
         self.max_width=max_width
         self.max_height=max_height
-        buf = struct.pack( FMT[2].HEADER, 'ufmf',
+        buf = struct.pack( FMT[self.version].HEADER, 'ufmf',
                            self.version, 0, self.max_width, self.max_height,
                            len(self.coding) )
         self.file.write(buf)
@@ -1058,7 +1089,7 @@ class UfmfSaverV2(UfmfSaverBase):
             print 'np_image_data.strides, width',np_image_data.strides, width
             raise
         b =  chr(KEYFRAME_CHUNK) + chr(char2) + keyframe_type # chunkid, len(type), type
-        b += struct.pack(FMT[2].KEYFRAME2,dtype,width,height,timestamp)
+        b += struct.pack(FMT[self.version].KEYFRAME2,dtype,width,height,timestamp)
         loc = self.file.tell()
         tmp = self._index['keyframe'][keyframe_type]
         if len(tmp)==0:
@@ -1071,7 +1102,7 @@ class UfmfSaverV2(UfmfSaverBase):
 
     def add_frame(self,origframe,timestamp,point_data):
         n_pts = len(point_data)
-        b = chr(FRAME_CHUNK) + struct.pack(FMT[2].POINTS1, timestamp, n_pts)
+        b = chr(FRAME_CHUNK) + struct.pack(FMT[self.version].POINTS1, timestamp, n_pts)
         loc = self.file.tell()
         tmp = self._index['frame']
         if len(tmp)==0:
@@ -1116,7 +1147,7 @@ class UfmfSaverV2(UfmfSaverBase):
                 roi = origframe[ ymin:ymax, xmin:xmax ]
                 this_str_buf = roi.tostring()
                 assert len(this_str_buf)==w*h
-                this_str_head = struct.pack(FMT[2].POINTS2, xmin, ymin, w, h)
+                this_str_head = struct.pack(FMT[self.version].POINTS2, xmin, ymin, w, h)
 
                 str_buf.append( this_str_head + this_str_buf )
                 saved_points.append( (xmin,ymin, xmax,ymax) )
@@ -1129,9 +1160,11 @@ class UfmfSaverV2(UfmfSaverBase):
         b = chr(INDEX_DICT_CHUNK)
         self.file.write(b)
         loc = self.file.tell()
+        if self.version==2 and loc > 4294967295:
+            raise ValueError('index location will not fit in .ufmf v2 file')
         _write_dict(self.file,self._index)
         self.file.seek(0)
-        buf = struct.pack( FMT[2].HEADER, 'ufmf',
+        buf = struct.pack( FMT[self.version].HEADER, 'ufmf',
                            self.version, loc,
                            self.max_width, self.max_height,
                            len(self.coding) )
@@ -1139,3 +1172,8 @@ class UfmfSaverV2(UfmfSaverBase):
         if self._file_opened:
             self.file.close()
             self._file_opened = False
+
+class UfmfSaverV2(UfmfSaverV3):
+    """class to write (save) .ufmf v2 files"""
+    def _get_interface_version(self):
+        return 2

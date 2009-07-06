@@ -7,17 +7,25 @@ def reindex(filename,short_file_ok=False,progress=False):
     version = ufmf.identify_ufmf_version(filename)
     if version == 1:
         raise ValueError('.ufmf v1 files have no index')
-    try:
-        f=ufmf.UfmfV2(filename,
-                      ignore_preexisting_index=True,
-                      short_file_ok=short_file_ok,
-                      raise_write_errors=True,
-                      mode='rb+',
-                      index_progress=progress,
-                      )
-    except ufmf.ShortUFMFFileError, err:
-        raise ValueError('this file appears to be short. '
-                         '(Hint: Retry with the --short-file-ok option.)')
+    elif version in (2,3):
+        try:
+            if version == 2:
+                cls = ufmf.UfmfV2
+            elif version==3:
+                cls = ufmf.UfmfV3
+
+            f=cls(filename,
+                          ignore_preexisting_index=True,
+                          short_file_ok=short_file_ok,
+                          raise_write_errors=True,
+                          mode='rb+',
+                          index_progress=progress,
+                          )
+        except ufmf.ShortUFMFFileError, err:
+            raise ValueError('this file appears to be short. '
+                             '(Hint: Retry with the --short-file-ok option.)')
+    else:
+        raise ValueError('unknown .ufmf file version')
 
 def main():
     usage = """%prog FILE [options]
@@ -46,7 +54,7 @@ This can be used to fix corrupt .ufmf indexes.
             progress=options.progress,
             )
 
-def _make_temp_ufmf_file():
+def _make_temp_ufmf_file(version):
     tmp_fd,filename = tempfile.mkstemp()
     os.fdopen(tmp_fd).close()
 
@@ -69,7 +77,7 @@ def _make_temp_ufmf_file():
     us = ufmf.UfmfSaver( filename,
                          frame1,
                          timestamp,
-                         version=2,
+                         version=version,
                          **kwargs)
     assert isinstance(us,ufmf.UfmfSaverBase)
     frame2 = np.zeros( (h,w), dtype = np.uint8 )
@@ -97,8 +105,8 @@ def _make_temp_ufmf_file():
     us.close()
     return filename
 
-def _check_reindex_file(is_corrupt):
-    orig_fname = _make_temp_ufmf_file()
+def _check_reindex_file(is_corrupt,version):
+    orig_fname = _make_temp_ufmf_file(version)
     try:
         reindexed_fname = orig_fname + '.reindexed'
         shutil.copyfile(orig_fname,reindexed_fname)
@@ -119,4 +127,5 @@ def _check_reindex_file(is_corrupt):
 
 def test_reindex_file():
     for is_corrupt in (True,False):
-        yield _check_reindex_file, is_corrupt
+        for version in (2,3):
+            yield _check_reindex_file, is_corrupt, version
