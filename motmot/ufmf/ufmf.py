@@ -404,7 +404,7 @@ class _UFmfV3LowLevelReader(object):
 class _UFmfV3Indexer(object):
     """create an index from an un-unindexed .ufmf v3 file"""
     def __init__(self,fd, version,
-                 ignore_preexisting_index=False, 
+                 ignore_preexisting_index=False,
                  short_file_ok=False,
                  index_progress=False,
                  ):
@@ -439,7 +439,7 @@ class _UFmfV3Indexer(object):
                                     loc=[])}
         if self._index_progress:
             import progressbar
-            
+
             widgets=['indexing: ', progressbar.Percentage(), ' ',
                      progressbar.Bar(), ' ', progressbar.ETA()]
             cur_pos = self._fd.tell()
@@ -587,7 +587,7 @@ class UfmfV3(UfmfBase):
                 index_dict_location = self._fd.tell()+1 # not the chunk location - add one
                 if self._version==2 and index_dict_location > 4294967295:
                     raise ValueError('index location will not fit in .ufmf v2 file')
-                
+
                 b = chr(INDEX_DICT_CHUNK)
                 self._fd.write(b)
                 _write_dict( self._fd, self._index )
