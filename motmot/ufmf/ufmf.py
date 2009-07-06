@@ -15,6 +15,9 @@ import math
 
 import motmot.FlyMovieFormat.FlyMovieFormat as FMF
 
+class ShortUFMFFileError(Exception):
+    pass
+
 class BaseDict(dict):
     def __getattr__(self,name):
         return self[name]
@@ -112,7 +115,8 @@ def _write_dict(fd,save_dict):
         fd.write(b)
         if isinstance(value,dict):
             _write_dict(fd,value)
-        elif isinstance(value,list):
+            continue
+        if isinstance(value,list) or isinstance(value,np.ndarray):
             larr = np.array(value)
             assert larr.ndim==1
             dtype_char = larr.dtype.char
@@ -120,8 +124,8 @@ def _write_dict(fd,save_dict):
             b = 'a'+dtype_char+struct.pack('<L',len(larr)*bytes_per_element)
             b += larr.tostring()
             fd.write(b)
-        else:
-            raise ValueError("don't know how to save value %s"%(value,))
+            continue
+        raise ValueError("don't know how to save value %s"%(value,))
 
 def _read_min_chars(fd,keylen,buf_remaining):
     if len(buf_remaining)>=keylen:
@@ -339,7 +343,8 @@ class _UFmfV2LowLevelReader(object):
             dtype=np.float32
             sz=4
         else:
-            raise ValueError('unknown dtype char')
+            raise ValueError('unknown dtype char "%s" (0x%0x)'%(dtype_char,
+                                                                ord(dtype_char)))
         read_len = width*height*sz
         buf = self._fd_read(read_len)
         frame = np.fromstring(buf,dtype=dtype)
@@ -372,13 +377,13 @@ class _UFmfV2LowLevelReader(object):
         buf = self._fd.read(n_bytes)
         if len(buf)!=n_bytes:
             if not short_OK:
-                raise ValueError('expected %d bytes, got %d: short file?'%(
+                raise ShortUFMFFileError('expected %d bytes, got %d: short file?'%(
                     n_bytes,len(buf)))
         return buf
 
 class _UFmfV2Indexer(object):
     """create an index from an un-unindexed .ufmf v2 file"""
-    def __init__(self,fd):
+    def __init__(self,fd, ignore_preexisting_index=False, short_file_ok=False):
         self._fd = fd
 
         self._keyframe2_sz = struct.calcsize(FMT[2].KEYFRAME2)
@@ -386,6 +391,9 @@ class _UFmfV2Indexer(object):
         self._points2_sz = struct.calcsize(FMT[2].POINTS2)
 
         self.r = _UFmfV2LowLevelReader(self._fd)
+        self._short_file_ok = short_file_ok
+        self._index_chunk_location = None
+        self._ignore_preexisting_index = ignore_preexisting_index
         self._create_index()
 
     def get_index(self):
@@ -415,7 +423,8 @@ class _UFmfV2Indexer(object):
         for key in self._index['frame'].keys():
             self._index['frame'][key]=np.array(
                 self._index['frame'][key])
-        self._index_chunk_location = self._fd.tell()
+        if self._index_chunk_location is None:
+            self._index_chunk_location = self._fd.tell()
 
     def _index_next_chunk(self):
         loc = self._fd.tell()
@@ -423,27 +432,39 @@ class _UFmfV2Indexer(object):
         if chunk_id_str == '':
             return None, None
         chunk_id = ord(chunk_id_str)
-        if chunk_id==KEYFRAME_CHUNK:
-            result = self.r._read_keyframe_chunk()
-            keyframe_type,frame,timestamp=result
-            tmp = self._index['keyframe'][keyframe_type]
-            if len(tmp)==0:
-                tmp['timestamp']=[]
-                tmp['loc']=[]
-            tmp['timestamp'].append(timestamp)
-            tmp['loc'].append(loc)
-        elif chunk_id==FRAME_CHUNK:
-            # read frame chunk
-            result = self.r._read_frame_chunk()
-            timestamp,regions = result
-            tmp = self._index['frame']
-            tmp['timestamp'].append(timestamp)
-            tmp['loc'].append(loc)
-        elif chunk_id==INDEX_DICT_CHUNK:
-            raise PreexistingIndexExists('indexer encountered index',loc=loc)
-        else:
-            raise ValueError('unexpected byte %d where chunk ID expected'%(
-                chunk_id,))
+        try:
+            if chunk_id==KEYFRAME_CHUNK:
+                result = self.r._read_keyframe_chunk()
+                keyframe_type,frame,timestamp=result
+                tmp = self._index['keyframe'][keyframe_type]
+                if len(tmp)==0:
+                    tmp['timestamp']=[]
+                    tmp['loc']=[]
+                tmp['timestamp'].append(timestamp)
+                tmp['loc'].append(loc)
+            elif chunk_id==FRAME_CHUNK:
+                # read frame chunk
+                result = self.r._read_frame_chunk()
+                timestamp,regions = result
+                tmp = self._index['frame']
+                tmp['timestamp'].append(timestamp)
+                tmp['loc'].append(loc)
+            elif chunk_id==INDEX_DICT_CHUNK:
+                if not self._ignore_preexisting_index:
+                    raise PreexistingIndexExists('indexer encountered index',
+                                                 loc=loc)
+                else:
+                    self.r._fd.seek(-1,os.SEEK_CUR) # undo chunk read - go back
+                    return None,None
+            else:
+                raise ValueError('unexpected byte %d where chunk ID expected'%(
+                    chunk_id,))
+        except ShortUFMFFileError:
+            if self._short_file_ok:
+                self._index_chunk_location = loc
+                return None,None
+            else:
+                raise
         return chunk_id, result
 
 class PreexistingIndexExists(Exception):
@@ -454,7 +475,27 @@ class PreexistingIndexExists(Exception):
 class UfmfV2(UfmfBase):
     """class to read .ufmf version 2 files"""
 
-    def __init__(self,file,mode='rb'):
+    def __init__(self,file,
+                 mode='rb',
+                 ignore_preexisting_index=False,
+                 short_file_ok=False,
+                 raise_write_errors=False,
+                 ):
+        """
+        **Arguments**
+        file : file name or file object
+            The file with the .ufmf data to read
+
+        **Optional keyword arguments**
+        mode : string
+            The mode to open the file with (e.g. 'rb' for read only, binary)
+        ignore_preexisting_index : boolean
+            Whether to ignore the index generate a new one
+        short_file_ok : boolean
+            Whether to ignore short file errors
+        raise_write_errors : boolean
+            Whether to ignore short file errors
+        """
         super(UfmfV2,self).__init__()
         if hasattr(file,'read'):
             # file-like object
@@ -477,35 +518,50 @@ class UfmfV2(UfmfBase):
         assert ufmf_str=='ufmf'
         self._coding = self._r._fd_read( coding_str_len )
         self._next_frame = 0
+        if ignore_preexisting_index:
+            index_location = 0
 
         if index_location == 0:
             # no pre-existing index. generate it.
             # save it.
-            tmp = _UFmfV2Indexer(self._fd)
+            tmp = _UFmfV2Indexer(
+                self._fd,
+                ignore_preexisting_index=ignore_preexisting_index,
+                short_file_ok=short_file_ok,
+                )
             self._index = tmp.get_index()
             loc = tmp.get_expected_index_chunk_location()
             self._fd.seek(loc)
             try:
                 b = chr(INDEX_DICT_CHUNK)
                 self._fd.write(b)
-                loc = self._fd.tell()
+                index_dict_location = self._fd.tell() # not the chunk location
                 _write_dict( self._fd, self._index )
+                self._fd.truncate()
                 self._fd.seek(0)
                 buf = struct.pack( FMT[2].HEADER, 'ufmf',
-                                   self._version, loc,
+                                   self._version, index_dict_location,
                                    self._max_width, self._max_height,
                                    len(self._coding) )
                 self._fd.write(buf)
             except IOError, err:
-                warnings.warn('IO error when trying to save .ufmf index '
-                              'for %s (was .ufmf file opened read-only?)'%file)
+                if raise_write_errors:
+                    raise
+                else:
+                    warnings.warn('IO error when trying to save .ufmf index '
+                                  'for %s (was .ufmf file opened read-only?)'%(
+                        file,))
         else:
+            # we are already in the chunk, so we don't expect INDEX_DICT_CHUNK
             # read index
             self._seek(index_location)
             buf = self._fd.read(4096)
+
+            # next char is 'd' for dict
             id = buf[:1]
             buf = buf[1:]
             assert id=='d' # dictionary
+
             self._index,buf_remaining = _read_dict(self._fd, buf_remaining=buf)
             if len(buf_remaining)!=0:
                 raise ValueError('bytes after expected end of file')
