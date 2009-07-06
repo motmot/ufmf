@@ -1,7 +1,7 @@
 import motmot.ufmf.ufmf as ufmf
 from optparse import OptionParser
 
-def remove_index(filename,short_file_ok=False):
+def reindex(filename,short_file_ok=False):
     version = ufmf.identify_ufmf_version(filename)
     if version == 1:
         raise ValueError('.ufmf v1 files have no index')
@@ -31,5 +31,5 @@ def main():
     filename = args[0]
     version = ufmf.identify_ufmf_version(filename)
     assert version != 1, 'v1 .ufmf files have no index to remove'
-    remove_index(filename,short_file_ok=options.short_file_ok)
+    reindex(filename,short_file_ok=options.short_file_ok)
 
