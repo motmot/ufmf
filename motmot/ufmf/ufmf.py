@@ -562,9 +562,12 @@ class UfmfV2(UfmfBase):
             loc = tmp.get_expected_index_chunk_location()
             self._fd.seek(loc)
             try:
+                index_dict_location = self._fd.tell()+1 # not the chunk location - add one
+                if self._version==2 and index_dict_location > 4294967295:
+                    raise ValueError('index location will not fit in .ufmf v2 file')
+                
                 b = chr(INDEX_DICT_CHUNK)
                 self._fd.write(b)
-                index_dict_location = self._fd.tell() # not the chunk location
                 _write_dict( self._fd, self._index )
                 self._fd.truncate()
                 self._fd.seek(0)
