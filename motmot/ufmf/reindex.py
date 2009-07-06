@@ -129,3 +129,6 @@ def test_reindex_file():
     for is_corrupt in (True,False):
         for version in (2,3):
             yield _check_reindex_file, is_corrupt, version
+
+if __name__=='__main__':
+    main()
