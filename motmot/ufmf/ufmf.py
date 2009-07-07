@@ -529,6 +529,7 @@ class UfmfV3(UfmfBase):
     def __init__(self,file,
                  mode='rb',
                  ignore_preexisting_index=False,
+                 is_ok_to_write_regenerated_index=True,
                  short_file_ok=False,
                  raise_write_errors=False,
                  index_progress=False,
@@ -543,6 +544,8 @@ class UfmfV3(UfmfBase):
             The mode to open the file with (e.g. 'rb' for read only, binary)
         ignore_preexisting_index : boolean
             Whether to ignore the index generate a new one
+        is_ok_to_write_regenerated_index : boolean
+            Whether to write index to disk if regenerated
         short_file_ok : boolean
             Whether to ignore short file errors
         raise_write_errors : boolean
@@ -577,6 +580,10 @@ class UfmfV3(UfmfBase):
         if ignore_preexisting_index:
             index_location = 0
 
+        self._keyframe2_sz = struct.calcsize(FMT[self._version].KEYFRAME2)
+        self._points1_sz = struct.calcsize(FMT[self._version].POINTS1)
+        self._points2_sz = struct.calcsize(FMT[self._version].POINTS2)
+
         if index_location == 0:
             # no pre-existing index. generate it.
             # save it.
@@ -587,6 +594,8 @@ class UfmfV3(UfmfBase):
                 index_progress=index_progress,
                 )
             self._index = tmp.get_index()
+            if not is_ok_to_write_regenerated_index:
+                return
             loc = tmp.get_expected_index_chunk_location()
             self._fd.seek(loc)
             try:
@@ -629,10 +638,6 @@ class UfmfV3(UfmfBase):
             except:
                 raise CorruptIndexError('the .ufmf index is corrupt. '
                                         '(Hint: Try the ufmf_reindex command.)')
-
-        self._keyframe2_sz = struct.calcsize(FMT[self._version].KEYFRAME2)
-        self._points1_sz = struct.calcsize(FMT[self._version].POINTS1)
-        self._points2_sz = struct.calcsize(FMT[self._version].POINTS2)
 
     def get_index(self):
         return self._index

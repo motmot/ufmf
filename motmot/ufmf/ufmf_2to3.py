@@ -27,6 +27,7 @@ def convert(filename,short_file_ok=False,progress=False):
                                     short_file_ok=short_file_ok,
                                     index_progress=progress,
                                     ignore_preexisting_index=True,
+                                    is_ok_to_write_regenerated_index=False,
                                     )
     except ufmf.ShortUFMFFileError, err:
         raise ValueError('this file appears to be short. '
