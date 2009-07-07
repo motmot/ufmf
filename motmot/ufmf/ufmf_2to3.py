@@ -33,7 +33,11 @@ def convert(filename,short_file_ok=False,progress=False):
         raise ValueError('this file appears to be short. '
                          '(Hint: Retry with the --short-file-ok option.)')
 
-    frame0,timestamp0 = infile_ufmf.get_bg_image()
+    try:
+        frame0,timestamp0 = infile_ufmf.get_bg_image()
+    except ufmf.NoMoreFramesException:
+        # a background image named 'frame0' does not exist
+        frame0,timestamp0 = None, None
     max_width, max_height = infile_ufmf.get_max_size()
     infile_ufmf.close()
 
