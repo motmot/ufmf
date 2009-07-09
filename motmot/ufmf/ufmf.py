@@ -1191,6 +1191,26 @@ class UfmfSaverV3(UfmfSaverBase):
             self.file.close()
             self._file_opened = False
 
+class AutoShrinkUfmfSaverV3(UfmfSaverV3):
+    """class to write (save) .ufmf v3 files without useless keyframes
+
+    Assumes that frames and keyframes will come in temporal order.
+    Does not save keyframes covering intervals in which no frames arrived.
+    """
+    def __init__(self,*args,**kwargs):
+        self._cached_keyframes = {}
+        super(AutoShrinkUfmfSaverV3,self).__init__(*args,**kwargs)
+    def _add_frame_regions(self,timestamp,regions):
+        if len(regions):
+            for kf_type in self._cached_keyframes.keys():
+                kf_image_data, kf_timestamp = self._cached_keyframes[kf_type]
+                super(AutoShrinkUfmfSaverV3,self).add_keyframe( \
+                                          kf_type, kf_image_data, kf_timestamp)
+                del self._cached_keyframes[kf_type]
+        super(AutoShrinkUfmfSaverV3,self)._add_frame_regions(timestamp,regions)
+    def add_keyframe(self,keyframe_type,image_data,timestamp):
+        self._cached_keyframes[keyframe_type] = (image_data,timestamp)
+
 class UfmfSaverV2(UfmfSaverV3):
     """class to write (save) .ufmf v2 files"""
     def _get_interface_version(self):
