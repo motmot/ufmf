@@ -748,11 +748,11 @@ class FlyMovieEmulator(object):
             pass
         self._darken=darken
         self._allow_no_such_frame_errors = allow_no_such_frame_errors
+        self._timestamps = None
         if (isinstance(self._ufmf,UfmfV1) and
             self._ufmf.use_conventional_named_mean_fmf):
             self.format = 'MONO8' # by definition
             self._fno2loc = None
-            self._timestamps = None
             assert white_background==False
         self.white_background = white_background
         self.abs_diff = abs_diff
@@ -808,6 +808,14 @@ class FlyMovieEmulator(object):
         else:
             self._ufmf.set_next_frame( fno )
 
+    def get_mean_for_timestamp(self, timestamp):
+        if isinstance(self._ufmf,UfmfV1):
+            return self._ufmf.get_mean_for_timestamp( timestamp )
+        else:
+            mean_im, tmp_timestamp = self._ufmf.get_keyframe_for_timestamp(
+                'mean', timestamp )
+            return mean_im
+
     def get_next_frame(self, _return_more=False):
         have_frame = False
         more = {}
@@ -861,11 +869,16 @@ class FlyMovieEmulator(object):
             return self._last_frame, timestamp
 
     def _fill_timestamps_and_locs(self):
-        assert isinstance(self._ufmf,UfmfV1)
-
         if self._timestamps is not None:
             # already did this
             return
+
+        if isinstance(self._ufmf,UfmfV3):
+            index = self._ufmf.get_index()
+            self._timestamps = index['frame']['timestamp']
+            return
+
+        assert isinstance(self._ufmf,UfmfV1)
 
         src_dir, fname = os.path.split(os.path.abspath( self.filename ))
         cache_dir = os.path.join( src_dir, '.ufmf-cache' )
