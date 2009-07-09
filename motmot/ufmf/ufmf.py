@@ -643,11 +643,11 @@ class UfmfV3(UfmfBase):
         return self._index
 
     def get_keyframe_for_timestamp(self, keyframe_type, timestamp):
-        """return the oldest keyframe before or at the time of timestamp"""
+        """return the most recent keyframe before or at the time of timestamp"""
         ts = self._index['keyframe'][keyframe_type]['timestamp']
         cond = timestamp >= ts
         idxs = np.nonzero(cond)[0]
-        idx = idxs[0]
+        idx = idxs[-1]
         return self._get_keyframe_N(keyframe_type,idx)
 
     def get_number_of_frames(self):
