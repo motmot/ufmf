@@ -1111,8 +1111,8 @@ class UfmfSaverV3(UfmfSaverBase):
         self.file.write(b)
         self.file.write(buffer(np_image_data))
 
-    def add_frame(self,origframe,timestamp,point_data):
-        n_pts = len(point_data)
+    def _add_frame_regions(self,timestamp,regions):
+        n_pts = len(regions)
         b = chr(FRAME_CHUNK) + struct.pack(FMT[self.version].POINTS1, timestamp, n_pts)
         loc = self.file.tell()
         tmp = self._index['frame']
@@ -1123,9 +1123,21 @@ class UfmfSaverV3(UfmfSaverBase):
         tmp['loc'].append(loc)
         self.file.write(b)
         str_buf = []
+        for region in regions:
+            xmin,ymin,roi = region
+            h,w = roi.shape
+            this_str_buf = roi.tostring()
+            assert len(this_str_buf)==w*h
+            this_str_head = struct.pack(FMT[self.version].POINTS2, xmin, ymin, w, h)
+            str_buf.append( this_str_head + this_str_buf )
+        fullstr = ''.join(str_buf)
+        self.file.write(fullstr)
+
+    def add_frame(self,origframe,timestamp,point_data):
         origframe = np.asarray(origframe)
         origframe_h, origframe_w = origframe.shape
         saved_points = []
+        regions = []
         if len(point_data):
             for this_point_data in point_data:
                 xidx, yidx, w, h = this_point_data[:4]
@@ -1156,14 +1168,9 @@ class UfmfSaverV3(UfmfSaverBase):
                 assert xmax-xmin == w
 
                 roi = origframe[ ymin:ymax, xmin:xmax ]
-                this_str_buf = roi.tostring()
-                assert len(this_str_buf)==w*h
-                this_str_head = struct.pack(FMT[self.version].POINTS2, xmin, ymin, w, h)
-
-                str_buf.append( this_str_head + this_str_buf )
+                regions.append( (xmin, ymin, roi) )
                 saved_points.append( (xmin,ymin, xmax,ymax) )
-            fullstr = ''.join(str_buf)
-            self.file.write(fullstr)
+        self._add_frame_regions(timestamp,regions)
         self.last_timestamp = timestamp
         return saved_points
 
