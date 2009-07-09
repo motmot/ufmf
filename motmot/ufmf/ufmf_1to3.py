@@ -4,7 +4,7 @@ from optparse import OptionParser
 import tempfile, os, shutil, struct, warnings, stat, sys
 import numpy as np
 
-def convert(filename,progress=False):
+def convert(filename,progress=False,shrink=False):
     version = ufmf.identify_ufmf_version(filename)
 
     if version != 1:
@@ -35,15 +35,19 @@ def convert(filename,progress=False):
                                      maxval=len(mean_timestamps)).start()
 
     conversion_success = False
+    if shrink:
+        cls = ufmf.AutoShrinkUfmfSaverV3
+    else:
+        cls = ufmf.UfmfSaverV3
     try:
         # open the file with ufmf writer to write header properly
-        outfile_ufmf = ufmf.UfmfSaverV3(tmp_out_filename,
-                                        coding='MONO8',
-                                        frame0=frame0,
-                                        timestamp0=timestamp0,
-                                        max_width=max_width,
-                                        max_height=max_height,
-                                        )
+        outfile_ufmf = cls(tmp_out_filename,
+                           coding='MONO8',
+                           frame0=frame0,
+                           timestamp0=timestamp0,
+                           max_width=max_width,
+                           max_height=max_height,
+                           )
 
         for (timestamp,regions) in infile_ufmf.readframes():
             if (next_mean_ts_idx < len(mean_timestamps) and
@@ -84,8 +88,8 @@ Convert a v1 .ufmf file to v3.
 """
 
     parser = OptionParser(usage)
-    parser.add_option("--short-file-ok", action='store_true', default=False,
-                      help="don't fail on files that appear to be truncated")
+    parser.add_option("--shrink", action='store_true', default=False,
+                      help="shrink output file")
     parser.add_option("--progress", action='store_true', default=False,
                       help="show a progress bar while indexing file")
     (options, args) = parser.parse_args()
