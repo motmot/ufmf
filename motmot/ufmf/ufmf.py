@@ -647,6 +647,9 @@ class UfmfV3(UfmfBase):
         ts = self._index['keyframe'][keyframe_type]['timestamp']
         cond = timestamp >= ts
         idxs = np.nonzero(cond)[0]
+        if len(idxs)==0:
+            raise NoMoreFramesException('no keyframe_type %s prior to %s'%(
+                keyframe_type,repr(timestamp)))
         idx = idxs[-1]
         return self._get_keyframe_N(keyframe_type,idx)
 
@@ -840,7 +843,7 @@ class FlyMovieEmulator(object):
             else:
                 try:
                     mean_image,im_timestamp=self._ufmf.get_keyframe_for_timestamp('mean',timestamp)
-                except KeyError:
+                except (KeyError, NoMoreFramesException):
                     warnings.warn('UfmfV3 fmf emulator filling bg with white')
                     w,h=self._ufmf.get_max_size()
                     mean_image = numpy.empty((h,w),dtype=np.uint8)

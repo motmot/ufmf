@@ -171,3 +171,54 @@ def check_b(seek_ok, version, close_it):
             us2.close()
         finally:
             os.unlink(filename)
+
+def test_late_keyframe_fmf_emulator():
+    w = 640
+    h = 480
+
+    frame1 = numpy.zeros( (h,w), dtype = numpy.uint8 )
+    frame1[20:30,30:32] = 255
+    frame1[20:30,30:32] = 255
+
+    timestamp = 1
+    radius = 15
+
+    filename = tempfile.mkstemp()[1]
+    subw = 2*radius
+    subh = 2*radius
+    try:
+        us = ufmf.UfmfSaverV3( filename,
+                               max_width=w,
+                               max_height=h)
+        assert isinstance(us,ufmf.UfmfSaverBase)
+        frame2 = numpy.zeros( (h,w), dtype = numpy.uint8 )
+        frame2[:,0::2] = range(0, w, 2) # clips (broadcast)
+        for i in range(h):
+            frame2[i,1::2] = i
+
+        ll_pts = [
+            [ (345, 144),
+              (521, 118),
+              ],
+            [ (347, 144),
+              (522, 119),
+              (367, 229),
+              ],
+            [(349,145),
+             (522,120),
+             (369,229),
+             ],
+            ]
+        all_pts = [ [(x+radius,y+radius,subw,subh) for (x,y) in pts ] for pts in ll_pts ]
+        for pts in all_pts:
+            timestamp += 1
+            us.add_frame( frame2, timestamp, pts )
+        # add keyframe after frame data
+        us.add_keyframe( 'mean', frame1, timestamp+10 )
+        us.close()
+
+        fmf = ufmf.FlyMovieEmulator(filename)
+        test_frame, test_timestamp = fmf.get_next_frame()
+        fmf.close()
+    finally:
+        os.unlink(filename)
