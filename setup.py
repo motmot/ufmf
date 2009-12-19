@@ -5,7 +5,7 @@ kws=dict(
 
 setup(name='motmot.ufmf',
       description='micro-fmf (.ufmf) format library',
-      version='0.2.9',
+      version='0.3.0',
       author='Andrew Straw',
       author_email='strawman@astraw.com',
       namespace_packages = ['motmot'],
