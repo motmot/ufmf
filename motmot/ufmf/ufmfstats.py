@@ -25,6 +25,9 @@ def main():
 
     filename = args[0]
     movie = ufmf.Ufmf(filename)
+    if not isinstance(movie,ufmf.UfmfV3):
+        sys.stderr.write('stats only available for .ufmf movies version 3\n')
+        sys.exit(1)
     idx = movie.get_index()
     for keyframe_type in idx['keyframe'].keys():
         if options.level >= 1:
