@@ -4,13 +4,23 @@ from optparse import OptionParser
 import tempfile, os, shutil, struct, warnings, stat, sys
 import numpy as np
 
-def convert(filename,progress=False,shrink=False):
+def convert(filename,progress=False,shrink=False, out_fname=None):
     version = ufmf.identify_ufmf_version(filename)
 
     if version != 1:
         raise ValueError('ufmf_1to3.convert requires a v1 file as input')
 
-    infile_ufmf=ufmf.UfmfV1(filename)
+    basename = os.path.splitext(filename)[0]
+    mean_fmf_filename = basename + '_mean.fmf'
+    if not os.path.exists( mean_fmf_filename ):
+        raise RuntimeError('conversion from "%s" requires _mean.fmf file "%s", '
+                           'but not found' % (filename, mean_fmf_filename) )
+
+    infile_ufmf=ufmf.UfmfV1(filename,
+                            use_conventional_named_mean_fmf=True)
+    if not infile_ufmf.use_conventional_named_mean_fmf:
+        raise RuntimeError('conversion requires _mean.fmf file, but not found')
+
     in_mean_fmf = infile_ufmf._mean_fmf # naughty access of private variable
     in_sumsqf_fmf = infile_ufmf._sumsqf_fmf # naughty access of private variable
     frame0,timestamp0 = infile_ufmf.get_bg_image()
@@ -22,9 +32,14 @@ def convert(filename,progress=False,shrink=False):
 
     next_mean_ts_idx = 0
 
-    tmp_out_filename = filename+'.v3'
-    while os.path.exists(tmp_out_filename):
-        tmp_out_filename += '.v3'
+    tmp_out_filename = out_fname
+    if tmp_out_filename is None:
+        tmp_out_filename = filename+'.v3'
+        while os.path.exists(tmp_out_filename):
+            tmp_out_filename += '.v3'
+
+    if os.path.exists(tmp_out_filename):
+        raise RuntimeError('file exists: %s'%tmp_out_filename)
 
     if progress:
         import progressbar
