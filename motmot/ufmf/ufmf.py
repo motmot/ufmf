@@ -851,7 +851,11 @@ class FlyMovieEmulator(object):
                 if _return_more:
                     sumsqf_image,sq_timestamp=self._ufmf.get_keyframe_for_timestamp('sumsq',timestamp)
                     more['sumsqf'] = sumsqf_image
-                self._last_frame = np.array(mean_image,copy=True).astype(np.uint8)
+                if not self.white_background:
+                    self._last_frame = np.array(mean_image,copy=True).astype(np.uint8)
+                else:
+                    self._last_frame = np.empty(mean_image.shape,dtype=np.uint8)
+                    self._last_frame.fill(255)
                 more['mean'] = mean_image
             have_frame = True
             more['regions'] = regions
