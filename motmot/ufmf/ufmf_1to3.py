@@ -107,6 +107,8 @@ Convert a v1 .ufmf file to v3.
                       help="shrink output file")
     parser.add_option("--progress", action='store_true', default=False,
                       help="show a progress bar while indexing file")
+    parser.add_option('-o','--outfile', default = None,
+                      help="destination file")
     (options, args) = parser.parse_args()
 
     if len(args)<1:
@@ -117,6 +119,7 @@ Convert a v1 .ufmf file to v3.
     convert(filename,
             progress=options.progress,
             shrink=options.shrink,
+            out_fname=options.outfile,
             )
 
 if __name__=='__main__':
