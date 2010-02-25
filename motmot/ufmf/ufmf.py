@@ -403,8 +403,8 @@ class _UFmfV3LowLevelReader(object):
         buf = self._fd.read(n_bytes)
         if len(buf)!=n_bytes:
             if not short_OK:
-                raise ShortUFMFFileError('expected %d bytes, got %d: short file?'%(
-                    n_bytes,len(buf)))
+                raise ShortUFMFFileError('expected %d bytes, got %d: short file %s?'%(
+                    n_bytes,len(buf). self._fd.name))
         return buf
 
 class _UFmfV3Indexer(object):
