@@ -15,13 +15,6 @@
             <border>2</border>
           </object>
           <object class="sizeritem">
-            <object class="wxButton" name="LOAD_BG_IMAGE">
-              <label>load background image...</label>
-            </object>
-            <flag>wxALL|wxALIGN_CENTRE</flag>
-            <border>2</border>
-          </object>
-          <object class="sizeritem">
             <object class="wxCheckBox" name="TAKE_BG_IMAGE_ALLOW_WHEN_SAVING">
               <label>Allow when saving output</label>
               <checked>0</checked>

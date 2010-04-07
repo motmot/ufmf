@@ -88,7 +88,6 @@ class Tracker(object):
         self.trx_writer = {}
 
         self.clear_and_take_bg_image = {}
-        self.load_bg_image = {}
         self.enable_ongoing_bg_image = {}
 
         self.save_nth_frame = {}
@@ -296,12 +295,6 @@ class Tracker(object):
                       ctrl.GetId(),
                       self.OnTakeBgImage)
 
-        ctrl = xrc.XRCCTRL(per_cam_panel,"LOAD_BG_IMAGE")
-        self.widget2cam_id[ctrl]=cam_id
-        wx.EVT_BUTTON(ctrl,
-                      ctrl.GetId(),
-                      self.OnLoadBgImage)
-
         ctrl = xrc.XRCCTRL(per_cam_panel,"ONGOING_BG_UPDATES")
         self.widget2cam_id[ctrl]=cam_id
         wx.EVT_CHECKBOX(ctrl,ctrl.GetId(),
@@ -454,7 +447,6 @@ class Tracker(object):
         self.data_queues[cam_id] = Queue.Queue()
         self.wxmessage_queues[cam_id] = Queue.Queue()
         self.clear_and_take_bg_image[cam_id] = threading.Event()
-        self.load_bg_image[cam_id] = Queue.Queue()
         self.enable_ongoing_bg_image[cam_id] = threading.Event()
 
         self.tracking_enabled[cam_id] = threading.Event()
@@ -542,53 +534,6 @@ class Tracker(object):
 
         self.clear_and_take_bg_image[cam_id].set()
         self.display_message('capturing background image')
-
-    def OnLoadBgImage(self,event):
-        widget = event.GetEventObject()
-        cam_id = self.widget2cam_id[widget]
-
-        per_cam_panel = self.per_cam_panel[cam_id]
-        ctrl = xrc.XRCCTRL(per_cam_panel,"TAKE_BG_IMAGE_ALLOW_WHEN_SAVING")
-        if not ctrl.GetValue() and cam_id in self.trx_writer:
-
-            dlg = wx.MessageDialog(self.wx_parent,
-                                   'Saving data - cannot take background image',
-                                   'UFMF FlyTrax error',
-                                   wx.OK | wx.ICON_ERROR
-                                   )
-            dlg.ShowModal()
-            dlg.Destroy()
-            return
-
-        # open dialog
-        dlg = wx.FileDialog( self.wx_parent, "open backsub output")
-        doit=False
-        try:
-            if dlg.ShowModal() == wx.ID_OK:
-                fname = dlg.GetFilename()
-                dirname = dlg.GetDirectory()
-                doit=True
-        finally:
-            dlg.Destroy()
-
-        if doit:
-            filename = os.path.join(dirname,fname)
-
-            if filename.endswith('.mat'):
-                load_dict = scipy.io.loadmat( filename, squeeze_me=True )
-                newbg = load_dict['bg_img']
-                if 0:
-                    print 'newbg.shape',newbg.shape
-                    print 'newbg.dtype',newbg.dtype
-                    print 'newbg.min()',newbg.min()
-                    print 'newbg.max()',newbg.max()
-                newbg = numpy.clip(newbg,0,255)
-                newbg = newbg.astype(numpy.uint8)
-            else:
-                raise ValueError("don't know how to open background image file")
-            newbg_fi = FastImage.asfastimage(newbg)
-            self.load_bg_image[cam_id].put(newbg_fi)
-            self.display_message('background image loaded')
 
     def OnEnableOngoingBg(self,event):
         widget = event.GetEventObject()
@@ -775,7 +720,6 @@ class Tracker(object):
         newmask = self.newmask[cam_id]
 
         clear_and_take_bg_image = self.clear_and_take_bg_image[cam_id]
-        load_bg_image = self.load_bg_image[cam_id]
         enable_ongoing_bg_image = self.enable_ongoing_bg_image[cam_id]
         data_queue = self.data_queues[cam_id] # transfers images and data to non-realtime thread
         wxmessage_queue = self.wxmessage_queues[cam_id] # transfers and messages to non-realtime thread
@@ -847,28 +791,6 @@ class Tracker(object):
 
             clear_and_take_bg_image.clear()
             del srcfi, bg_copy # don't pollute namespace
-
-        if not load_bg_image.empty():
-            try:
-                while 1:
-                    new_bg_image_fastimage = load_bg_image.get_nowait()
-            except Queue.Empty:
-                pass
-            # this is a view we write into
-            # copy current image into background image
-            running_mean8u_im = realtime_analyzer.get_image_view('mean')
-            if running_mean8u_im.size == new_bg_image_fastimage.size:
-                new_bg_image_fastimage.get_32f_copy_put( running_mean_im,   max_frame_size )
-                new_bg_image_fastimage.get_8u_copy_put(  running_mean8u_im, max_frame_size )
-
-                # make copy available for saving data
-                self.bg_update_lock.acquire()
-                self.full_bg_image[cam_id] = new_bg_image_fastimage
-                self.bg_update_lock.release()
-            else:
-                wxmessage_queue.put( ('new background image must be same size as image frame',
-                                      'UFMF FlyTrax error',
-                                      wx.OK | wx.ICON_ERROR) )
 
         if enable_ongoing_bg_image.isSet():
 
