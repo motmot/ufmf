@@ -44,7 +44,7 @@ import wx
 from wx import xrc
 import scipy.io
 
-RESFILE = pkg_resources.resource_filename(__name__,"flytrax.xrc") # trigger extraction
+RESFILE = pkg_resources.resource_filename(__name__,"ufmf_flytrax.xrc") # trigger extraction
 RES = xrc.EmptyXmlResource()
 RES.LoadFromString(open(RESFILE).read())
 BGROI_IM=True
