@@ -707,7 +707,6 @@ class Tracker(object):
 
         if cam_id not in self.process_frame_cam_ids:
             self.process_frame_cam_ids.append( cam_id )
-        cam_no = self.process_frame_cam_ids.index( cam_id )
 
         self.ticks_since_last_update[cam_id] += 1
         start = time.time()
