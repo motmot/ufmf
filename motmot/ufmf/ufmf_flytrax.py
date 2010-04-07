@@ -132,8 +132,6 @@ class Tracker(object):
 
         self.bg_update_lock = threading.Lock()
 
-        self.send_over_ip = threading.Event()
-
         self.sockobj = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         self.minimum_eccentricity = 1.5
@@ -182,7 +180,6 @@ class Tracker(object):
         self.roi_sz_lock = threading.Lock()
         self.roi_display_sz = FastImage.Size( 100, 100 ) # width, height
         self.roi_save_fmf_sz = FastImage.Size( 100, 100 ) # width, height
-        self.roi_send_sz = FastImage.Size( 20, 20 ) # width, height
 
 ###############
 
@@ -209,11 +206,6 @@ class Tracker(object):
         ctrl = xrc.XRCCTRL(self.options_dlg,'ROI_SAVE_FMF_WIDTH')
         wxvt.Validator(ctrl,ctrl.GetId(),self.OnSetROI,validate_roi_dimension)
         ctrl = xrc.XRCCTRL(self.options_dlg,'ROI_SAVE_FMF_HEIGHT')
-        wxvt.Validator(ctrl,ctrl.GetId(),self.OnSetROI,validate_roi_dimension)
-
-        ctrl = xrc.XRCCTRL(self.options_dlg,'ROI_SEND_WIDTH')
-        wxvt.Validator(ctrl,ctrl.GetId(),self.OnSetROI,validate_roi_dimension)
-        ctrl = xrc.XRCCTRL(self.options_dlg,'ROI_SEND_HEIGHT')
         wxvt.Validator(ctrl,ctrl.GetId(),self.OnSetROI,validate_roi_dimension)
 
         self.OnSetROI(None)
@@ -243,7 +235,7 @@ class Tracker(object):
     def OnSetROI(self,event):
         names = ['ROI_DISPLAY',
                  'ROI_SAVE_FMF',
-                 'ROI_SEND']
+                 ]
         topush = {}
         for name in names:
             width_ctrl = xrc.XRCCTRL(self.options_dlg, name+'_WIDTH')
@@ -925,7 +917,6 @@ class Tracker(object):
             try:
                 roi_display_sz = self.roi_display_sz
                 roi_save_fmf_sz = self.roi_save_fmf_sz
-                roi_send_sz = self.roi_send_sz
             finally:
                 self.roi_sz_lock.release()
 
@@ -937,11 +928,6 @@ class Tracker(object):
                 points, roi_save_fmf_sz,
                 fibuf, buf_offset, full_frame_live,
                 max_frame_size)
-            roi_send, (udp_send_x0, udp_send_y0) = self._process_frame_extract_roi(
-                points, roi_send_sz,
-                fibuf, buf_offset, full_frame_live,
-                max_frame_size)
-
 
             n_pts = len(points)
 
@@ -953,31 +939,6 @@ class Tracker(object):
                 numdata = (x,y, slope, fmf_save_x0, fmf_save_y0, timestamp, area, framenumber)
                 data = (roi_save_fmf, numdata)
                 data_queue.put( data )
-
-                runthread_remote_host = self.get_downstream_hosts()
-
-                n_downstream_hosts = len(runthread_remote_host)
-                if self.last_n_downstream_hosts != n_downstream_hosts:
-                    ctrl = xrc.XRCCTRL(self.frame,'SEND_TO_IP_ENABLED')
-                    ctrl.SetLabel('send data to %d receiver(s)'%n_downstream_hosts)
-                    self.last_n_downstream_hosts = n_downstream_hosts
-
-                # send data over UDP
-                if self.send_over_ip.isSet() and runthread_remote_host is not None:
-                    # XXX send these data
-                    a = (roi_send, udp_send_x0, udp_send_y0)
-                    databuf1 = struct.pack('cBLdfffffBBII',
-                                           'e',cam_no,framenumber,timestamp,
-                                           x,y,area,slope,eccentricity,
-                                           roi_send.size.w,roi_send.size.h,
-                                           udp_send_x0,udp_send_y0)
-                    databuf2 = numpy.array(roi_send).tostring()
-                    databuf = databuf1 + databuf2
-                    #assert len(databuf2) == roi_send.size.w * roi_send.size.h
-                    #print 'transmitting %d bytes to %d hosts'%(
-                    #    len(databuf),len(self.runthread_remote_host))
-                    for remote_host in runthread_remote_host:
-                        self.sockobj.sendto( databuf, remote_host)
 
             if BGROI_IM:
                 running_mean8u_im = realtime_analyzer.get_image_view('mean')

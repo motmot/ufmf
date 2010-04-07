@@ -559,24 +559,6 @@
                 </object>
                 <flag>wxALIGN_CENTRE</flag>
               </object>
-              <object class="sizeritem">
-                <object class="wxStaticText">
-                  <label>Send (UDP)</label>
-                </object>
-                <flag>wxALIGN_CENTRE</flag>
-              </object>
-              <object class="sizeritem">
-                <object class="wxTextCtrl" name="ROI_SEND_WIDTH">
-                  <value>20</value>
-                </object>
-                <flag>wxALIGN_CENTRE</flag>
-              </object>
-              <object class="sizeritem">
-                <object class="wxTextCtrl" name="ROI_SEND_HEIGHT">
-                  <value>20</value>
-                </object>
-                <flag>wxALIGN_CENTRE</flag>
-              </object>
             </object>
             <option>1</option>
             <flag>wxALL|wxEXPAND</flag>
