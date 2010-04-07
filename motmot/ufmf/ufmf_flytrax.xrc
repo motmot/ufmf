@@ -277,7 +277,7 @@
       </object>
     </object>
   </object>
-  <object class="wxFrame" name="FLYTRAX_FRAME">
+  <object class="wxFrame" name="UFMF_FLYTRAX_FRAME">
     <title>FlyTrax</title>
     <object class="wxBoxSizer">
       <orient>wxVERTICAL</orient>
@@ -306,28 +306,6 @@
                 </object>
                 <option>1</option>
                 <flag>wxLEFT|wxRIGHT|wxEXPAND</flag>
-                <border>10</border>
-              </object>
-              <object class="sizeritem">
-                <object class="wxStaticBoxSizer">
-                  <label>realtime output control</label>
-                  <orient>wxHORIZONTAL</orient>
-                  <object class="sizeritem">
-                    <object class="wxCheckBox" name="SEND_TO_IP_ENABLED">
-                      <label>send data to 0 receiver(s)</label>
-                      <checked>0</checked>
-                    </object>
-                    <flag>wxALIGN_CENTRE_VERTICAL</flag>
-                  </object>
-                  <object class="sizeritem">
-                    <object class="wxButton" name="EDIT_UDP_RECEIVERS">
-                      <label>Edit sendto list...</label>
-                    </object>
-                    <option>1</option>
-                  </object>
-                </object>
-                <option>0</option>
-                <flag>wxTOP|wxLEFT|wxRIGHT|wxEXPAND</flag>
                 <border>10</border>
               </object>
               <object class="sizeritem">

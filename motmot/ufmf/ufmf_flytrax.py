@@ -1,34 +1,7 @@
 from __future__ import division
 
-# FlyTrax is multi-camera aware. That's why there is so much cam_id
-# stuff in here. When/if fview gets re-written to do multiple cameras,
-# FlyTrax should be ready to go.
-
-# XXX ROI isn't implemented as fast as could be. First, a full frame
-# is sent to do_work() for analysis. Second, a new full-frame buffer
-# is allocated for each incoming frame. That could be cached and
-# recycled.
-
-# There are 3 levels of ROIs implemented:
-
-#  1) At the hardware (camera) level. This is handled transparently by
-#  fview.
-
-#  2) At the software level. This is handled mostly transparently by
-#  the use_roi2 parameter passed to realtime_analyzer.do_work(). This
-#  gets called "software ROI" in GUI.
-
-#  3) Display/Save/Send ROIs. These are collected by
-#  _process_frame_extract_roi() during the process_frame() call.
-
 import sys, threading, Queue, time, socket, math, struct, os
 import pkg_resources
-import traxio
-
-try:
-    import trax_udp_sender
-except ImportError:
-    import flytrax.trax_udp_sender as trax_udp_sender
 
 import motmot.wxvideo.wxvideo as wxvideo
 import motmot.imops.imops as imops
@@ -89,15 +62,12 @@ class LockedValue:
             pass
         return self._val
 
-class Tracker(trax_udp_sender.UDPSender):
+class Tracker(object):
     def __init__(self,wx_parent):
         self.wx_parent = wx_parent
-        self.frame = RES.LoadFrame(self.wx_parent,"FLYTRAX_FRAME") # make frame main panel
+        self.frame = RES.LoadFrame(self.wx_parent,"UFMF_FLYTRAX_FRAME") # make frame main panel
 
-        trax_udp_sender.UDPSender.__init__(self,self.frame)
         self.last_n_downstream_hosts = None
-        ctrl = xrc.XRCCTRL(self.frame,"EDIT_UDP_RECEIVERS")
-        ctrl.Bind( wx.EVT_BUTTON, self.OnEditUDPReceivers)
 
         self.frame_nb = xrc.XRCCTRL(self.frame,"FLYTRAX_NOTEBOOK")
         self.status_message = xrc.XRCCTRL(self.frame,"STATUS_MESSAGE")
@@ -215,14 +185,6 @@ class Tracker(trax_udp_sender.UDPSender):
         self.roi_send_sz = FastImage.Size( 20, 20 ) # width, height
 
 ###############
-
-        send_to_ip_enabled_widget = xrc.XRCCTRL(self.frame,"SEND_TO_IP_ENABLED")
-        send_to_ip_enabled_widget.Bind( wx.EVT_CHECKBOX,
-                                        self.OnEnableSendToIP)
-        if send_to_ip_enabled_widget.IsChecked():
-            self.send_over_ip.set()
-        else:
-            self.send_over_ip.clear()
 
         ctrl = xrc.XRCCTRL(self.frame,'EDIT_GLOBAL_OPTIONS')
         ctrl.Bind( wx.EVT_BUTTON, self.OnEditGlobalOptions)
@@ -550,7 +512,7 @@ class Tracker(trax_udp_sender.UDPSender):
         return BufferAllocator()
 
     def get_plugin_name(self):
-        return 'FlyTrax'
+        return 'UFMF FlyTrax'
 
     def OnEditMask(self,event):
         widget = event.GetEventObject()
@@ -579,7 +541,7 @@ class Tracker(trax_udp_sender.UDPSender):
 
             dlg = wx.MessageDialog(self.wx_parent,
                                    'Saving data - cannot take background image',
-                                   'FlyTrax error',
+                                   'UFMF FlyTrax error',
                                    wx.OK | wx.ICON_ERROR
                                    )
             dlg.ShowModal()
@@ -599,7 +561,7 @@ class Tracker(trax_udp_sender.UDPSender):
 
             dlg = wx.MessageDialog(self.wx_parent,
                                    'Saving data - cannot take background image',
-                                   'FlyTrax error',
+                                   'UFMF FlyTrax error',
                                    wx.OK | wx.ICON_ERROR
                                    )
             dlg.ShowModal()
@@ -646,7 +608,7 @@ class Tracker(trax_udp_sender.UDPSender):
             if not ctrl.GetValue() and cam_id in self.trx_writer:
                 dlg = wx.MessageDialog(self.wx_parent,
                                        'Saving data - cannot take background image',
-                                       'FlyTrax error',
+                                       'UFMF FlyTrax error',
                                        wx.OK | wx.ICON_ERROR
                                        )
                 dlg.ShowModal()
@@ -803,7 +765,7 @@ class Tracker(trax_udp_sender.UDPSender):
         if self.pixel_format[cam_id]=='YUV422':
             buf = imops.yuv422_to_mono8( numpy.asarray(buf) ) # convert
         elif not self.pixel_format[cam_id].startswith('MONO8'):
-            raise ValueError("flytrax plugin incompatible with data format")
+            raise ValueError("ufmf flytrax plugin incompatible with data format")
             return [], []
 
         if cam_id not in self.process_frame_cam_ids:
@@ -913,7 +875,7 @@ class Tracker(trax_udp_sender.UDPSender):
                 self.bg_update_lock.release()
             else:
                 wxmessage_queue.put( ('new background image must be same size as image frame',
-                                      'FlyTrax error',
+                                      'UFMF FlyTrax error',
                                       wx.OK | wx.ICON_ERROR) )
 
         if enable_ongoing_bg_image.isSet():
@@ -1158,7 +1120,7 @@ class Tracker(trax_udp_sender.UDPSender):
         if bg_image is None:
             dlg = wx.MessageDialog(self.wx_parent,
                                    'No background image (%s)- cannot save data'%cam_id,
-                                   'FlyTrax error',
+                                   'UFMF FlyTrax error',
                                    wx.OK | wx.ICON_ERROR
                                    )
             dlg.ShowModal()
@@ -1168,8 +1130,7 @@ class Tracker(trax_udp_sender.UDPSender):
         cam_id = self.last_image_cam_id
         prefix = self.save_data_prefix_widget[cam_id].GetValue()
         fname = prefix+time.strftime('%Y%m%d_%H%M%S')
-        trx_writer = traxio.TraxDataWriter(fname,bg_image)
-        self.trx_writer[cam_id] = trx_writer
+        self.trx_writer[cam_id] = None
         self.save_status_widget[cam_id].SetLabel('saving')
         self.display_message('saving data to %s'%fname)
 
