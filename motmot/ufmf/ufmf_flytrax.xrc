@@ -278,7 +278,7 @@
     </object>
   </object>
   <object class="wxFrame" name="UFMF_FLYTRAX_FRAME">
-    <title>FlyTrax</title>
+    <title>UFMF FlyTrax</title>
     <object class="wxBoxSizer">
       <orient>wxVERTICAL</orient>
       <object class="sizeritem">
@@ -489,7 +489,7 @@
     <style>wxDEFAULT_DIALOG_STYLE|wxTHICK_FRAME</style>
   </object>
   <object class="wxDialog" name="OPTIONS_DIALOG">
-    <title>FlyTrax options</title>
+    <title>UFMF FlyTrax options</title>
     <object class="wxBoxSizer">
       <orient>wxVERTICAL</orient>
       <object class="sizeritem">
