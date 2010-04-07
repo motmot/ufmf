@@ -75,7 +75,6 @@ class Tracker(object):
         self.new_image = False
 
         self.cam_ids = []
-        self.process_frame_cam_ids = []
         self.pixel_format = {}
 
         self.use_roi2 = {}
@@ -704,9 +703,6 @@ class Tracker(object):
         elif not self.pixel_format[cam_id].startswith('MONO8'):
             warnings.warn("flytrax plugin incompatible with data format")
             return [], []
-
-        if cam_id not in self.process_frame_cam_ids:
-            self.process_frame_cam_ids.append( cam_id )
 
         self.ticks_since_last_update[cam_id] += 1
         start = time.time()
