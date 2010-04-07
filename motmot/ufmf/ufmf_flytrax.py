@@ -8,6 +8,7 @@ import motmot.imops.imops as imops
 import motmot.FastImage.FastImage as FastImage
 
 import motmot.realtime_image_analysis.realtime_image_analysis as realtime_image_analysis
+import motmot.ufmf.ufmf as ufmf
 
 import numpy
 
@@ -84,7 +85,7 @@ class Tracker(object):
 
         self.data_queues = {}
         self.wxmessage_queues = {}
-        self.trx_writer = {}
+        self.ufmf_writer = {}
 
         self.clear_and_take_bg_image = {}
         self.enable_ongoing_bg_image = {}
@@ -520,7 +521,7 @@ class Tracker(object):
 
         per_cam_panel = self.per_cam_panel[cam_id]
         ctrl = xrc.XRCCTRL(per_cam_panel,"TAKE_BG_IMAGE_ALLOW_WHEN_SAVING")
-        if not ctrl.GetValue() and cam_id in self.trx_writer:
+        if not ctrl.GetValue() and cam_id in self.ufmf_writer:
 
             dlg = wx.MessageDialog(self.wx_parent,
                                    'Saving data - cannot take background image',
@@ -541,7 +542,7 @@ class Tracker(object):
         if widget.GetValue():
             per_cam_panel = self.per_cam_panel[cam_id]
             ctrl = xrc.XRCCTRL(per_cam_panel,"TAKE_BG_IMAGE_ALLOW_WHEN_SAVING")
-            if not ctrl.GetValue() and cam_id in self.trx_writer:
+            if not ctrl.GetValue() and cam_id in self.ufmf_writer:
                 dlg = wx.MessageDialog(self.wx_parent,
                                        'Saving data - cannot take background image',
                                        'UFMF FlyTrax error',
@@ -901,20 +902,20 @@ class Tracker(object):
     def OnServiceIncomingData(self, evt):
         for cam_id in self.cam_ids:
             data_queue = self.data_queues[cam_id]
-            trx_writer = self.trx_writer.get(cam_id,None)
+            ufmf_writer = self.ufmf_writer.get(cam_id,None)
             try:
                 while 1:
                     data = data_queue.get(False) # don't block
-                    if trx_writer is not None: # saving data
+                    if ufmf_writer is not None: # saving data
                         roi_img, numdata = data
                         (posx, posy, orientation, windowx, windowy, timestamp, area, framenumber) = numdata
                         if framenumber%self.save_nth_frame[cam_id] == 0:
-                            trx_writer.write_data(roi_img=roi_img,
-                                                  posx=posx,posy=posy,
-                                                  orientation=orientation,
-                                                  windowx=windowx,windowy=windowy,
-                                                  timestamp=timestamp,
-                                                  area=area)
+                            ufmf_writer.write_data(roi_img=roi_img,
+                                                   posx=posx,posy=posy,
+                                                   orientation=orientation,
+                                                   windowx=windowx,windowy=windowy,
+                                                   timestamp=timestamp,
+                                                   area=area)
             except Queue.Empty:
                 pass
         self.update_screen()
@@ -977,7 +978,7 @@ class Tracker(object):
         widget = event.GetEventObject()
         cam_id = self.widget2cam_id[widget]
 
-        if cam_id in self.trx_writer:
+        if cam_id in self.ufmf_writer:
             self.display_message("already saving data: not starting")
             return
 
@@ -1007,8 +1008,21 @@ class Tracker(object):
 
         cam_id = self.last_image_cam_id
         prefix = self.save_data_prefix_widget[cam_id].GetValue()
-        fname = prefix+time.strftime('%Y%m%d_%H%M%S')
-        self.trx_writer[cam_id] = None
+        fname = prefix+time.strftime('%Y%m%d_%H%M%S.ufmf')
+        ufmf_writer = ufmf.AutoShrinkUfmfSaverV3( fname,
+                                                  coding = self.pixel_format[cam_id],
+                                                  max_width=self.max_frame_size[cam_id].w,
+                                                  max_height=self.max_frame_size[cam_id].h,
+                                                  )
+        running_mean_im = self.running_mean_im[cam_id]
+        if running_mean_im is not None:
+            ufmf_writer.add_keyframe('mean',
+                                     running_mean_im,
+                                     last_bgcmp_image_timestamp)
+            ufmf_writer.add_keyframe('sumsq',
+                                     last_running_sumsqf_image,
+                                     last_bgcmp_image_timestamp)
+        self.ufmf_writer[cam_id] = ufmf_writer
         self.save_status_widget[cam_id].SetLabel('saving')
         self.display_message('saving data to %s'%fname)
 
@@ -1016,9 +1030,9 @@ class Tracker(object):
         widget = event.GetEventObject()
         cam_id = self.widget2cam_id[widget]
 
-        if cam_id in self.trx_writer:
-            self.trx_writer[cam_id].close()
-            del self.trx_writer[cam_id]
+        if cam_id in self.ufmf_writer:
+            self.ufmf_writer[cam_id].close()
+            del self.ufmf_writer[cam_id]
             self.save_status_widget[cam_id].SetLabel('not saving')
 
             per_cam_panel = self.per_cam_panel[cam_id]
@@ -1027,15 +1041,15 @@ class Tracker(object):
         else:
             self.display_message("not saving data: not stopping")
 
-        if not len(self.trx_writer):
+        if not len(self.ufmf_writer):
             ctrl = xrc.XRCCTRL(self.options_dlg,'ROI_SAVE_FMF_WIDTH')
             ctrl.Enable(True)
             ctrl = xrc.XRCCTRL(self.options_dlg,'ROI_SAVE_FMF_HEIGHT')
             ctrl.Enable(True)
 
     def quit(self):
-        for trx_writer in self.trx_writer.itervalues():
-            trx_writer.close() # make sure all data savers close nicely
+        for ufmf_writer in self.ufmf_writer.itervalues():
+            ufmf_writer.close() # make sure all data savers close nicely
 
     def update_screen(self):
         """Draw on screen
