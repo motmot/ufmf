@@ -702,7 +702,7 @@ class Tracker(object):
         if self.pixel_format[cam_id]=='YUV422':
             buf = imops.yuv422_to_mono8( numpy.asarray(buf) ) # convert
         elif not self.pixel_format[cam_id].startswith('MONO8'):
-            raise ValueError("ufmf flytrax plugin incompatible with data format")
+            warnings.warn("flytrax plugin incompatible with data format")
             return [], []
 
         if cam_id not in self.process_frame_cam_ids:
