@@ -7,6 +7,7 @@ import motmot.imops.imops as imops
 import motmot.FastImage.FastImage as FastImage
 
 import motmot.realtime_image_analysis.realtime_image_analysis as realtime_image_analysis
+
 import motmot.ufmf.ufmf as ufmf
 
 import numpy
@@ -318,7 +319,7 @@ class Tracker(object):
 #####################
 
         # setup non-GUI stuff
-        max_num_points = 1
+        max_num_points = 10
         self.cam_ids.append(cam_id)
 
         self.display_active[cam_id] = threading.Event()
@@ -576,9 +577,10 @@ class Tracker(object):
 
         if clear_and_take_bg_image.isSet():
             bunch.initial_take_bg_state = 'gather'
-            bunch.initial_take_frames = [ numpy.array(src_fullframe_fi) ]
+            bunch.initial_take_frames = []
             with self.bg_update_lock:
                 bunch.last_running_mean_im = None
+            clear_and_take_bg_image.clear()
 
         if enable_ongoing_bg_image.isSet():
             self.ticks_since_last_update[cam_id] += 1
@@ -607,8 +609,6 @@ class Tracker(object):
 
             noisy_pixels_mask = bunch.noisy_pixels_mask_full.roi(l, b, fibuf.size)
 
-            sys.stdout.write('B')
-            sys.stdout.flush()
             realtime_image_analysis.do_bg_maint(
                 running_mean_im,#in
                 hw_roi_frame,#in
