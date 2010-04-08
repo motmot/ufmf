@@ -84,10 +84,8 @@ class Tracker(object):
 
         self.clear_and_take_bg_image = {}
 
-        self.ongoing_bg_image_num_images = {}
         self.ongoing_bg_image_update_interval = {}
 
-        self.tracking_enabled = {}
         self.realtime_analyzer = {}
         self.max_frame_size = {}
 
@@ -95,6 +93,8 @@ class Tracker(object):
         self.new_clear_threshold = {}
         self.diff_threshold_value = {}
         self.new_diff_threshold = {}
+        self.roi2_radius_value = {}
+        self.new_roi2_radius = {}
         self.display_active = {}
 
         self.save_status_widget = {}
@@ -157,16 +157,6 @@ class Tracker(object):
                       ctrl.GetId(),
                       self.OnTakeBgImage)
 
-        self.ongoing_bg_image_num_images[cam_id] = LockedValue(20)
-        ctrl = xrc.XRCCTRL(per_cam_panel,"NUM_BACKGROUND_IMAGES")
-        ctrl.SetValue( str(self.ongoing_bg_image_num_images[cam_id].get() ))
-        self.widget2cam_id[ctrl]=cam_id
-        validator = wxvt.setup_validated_integer_callback(
-            ctrl,
-            ctrl.GetId(),
-            self.OnSetNumBackgroundImages)
-        self.xrcid2validator[cam_id]["NUM_BACKGROUND_IMAGES"] = validator
-
         self.ongoing_bg_image_update_interval[cam_id] = LockedValue(50)
         ctrl = xrc.XRCCTRL(per_cam_panel,"BACKGROUND_IMAGE_UPDATE_INTERVAL")
         ctrl.SetValue( str(self.ongoing_bg_image_update_interval[cam_id].get()))
@@ -176,12 +166,6 @@ class Tracker(object):
             ctrl.GetId(),
             self.OnSetBackgroundUpdateInterval)
         self.xrcid2validator[cam_id]["BACKGROUND_IMAGE_UPDATE_INTERVAL"] = validator
-
-        tracking_enabled_widget = xrc.XRCCTRL(per_cam_panel,"TRACKING_ENABLED")
-        self.widget2cam_id[tracking_enabled_widget]=cam_id
-        wx.EVT_CHECKBOX(tracking_enabled_widget,
-                        tracking_enabled_widget.GetId(),
-                        self.OnTrackingEnabled)
 
         ctrl = xrc.XRCCTRL(per_cam_panel,"CLEAR_THRESHOLD")
         self.widget2cam_id[ctrl]=cam_id
@@ -194,12 +178,39 @@ class Tracker(object):
 
         ctrl = xrc.XRCCTRL(per_cam_panel,"DIFF_THRESHOLD")
         self.widget2cam_id[ctrl]=cam_id
-        validator = wxvt.setup_validated_float_callback(
+        validator = wxvt.setup_validated_integer_callback(
             ctrl,
             ctrl.GetId(),
             self.OnDiffThreshold,
             ignore_initial_value=True)
         self.xrcid2validator[cam_id]["DIFF_THRESHOLD"] = validator
+
+        ctrl = xrc.XRCCTRL(per_cam_panel,"ROI2_RADIUS")
+        self.widget2cam_id[ctrl]=cam_id
+        validator = wxvt.setup_validated_integer_callback(
+            ctrl,
+            ctrl.GetId(),
+            self.OnRoi2Radius,
+            ignore_initial_value=True)
+        self.xrcid2validator[cam_id]["ROI2_RADIUS"] = validator
+
+        ctrl = xrc.XRCCTRL(per_cam_panel,"INVERSE_ALPHA")
+        self.widget2cam_id[ctrl]=cam_id
+        validator = wxvt.setup_validated_float_callback(
+            ctrl,
+            ctrl.GetId(),
+            self.OnInverseAlpha,
+            ignore_initial_value=True)
+        self.xrcid2validator[cam_id]["INVERSE_ALPHA"] = validator
+
+        ctrl = xrc.XRCCTRL(per_cam_panel,"N_SIGMA")
+        self.widget2cam_id[ctrl]=cam_id
+        validator = wxvt.setup_validated_float_callback(
+            ctrl,
+            ctrl.GetId(),
+            self.OnNSigma,
+            ignore_initial_value=True)
+        self.xrcid2validator[cam_id]["N_SIGMA"] = validator
 
         start_recording_widget = xrc.XRCCTRL(per_cam_panel,"START_RECORDING")
         self.widget2cam_id[start_recording_widget]=cam_id
@@ -233,16 +244,12 @@ class Tracker(object):
             self.display_active[cam_id].set()
 
         self.clear_and_take_bg_image[cam_id] = threading.Event()
-
-        self.tracking_enabled[cam_id] = threading.Event()
-        if tracking_enabled_widget.IsChecked():
-            self.tracking_enabled[cam_id].set()
-        else:
-            self.tracking_enabled[cam_id].clear()
+        self.clear_and_take_bg_image[cam_id].set() # start off setting background
 
         self.ticks_since_last_update[cam_id] = 0
         lbrt = (0,0,max_width-1,max_height-1)
-        roi2_radius=61
+        
+        roi2_radius=int(xrc.XRCCTRL(per_cam_panel,"ROI2_RADIUS").GetValue())
         ra = realtime_image_analysis.RealtimeAnalyzer(lbrt,
                                                       max_width,
                                                       max_height,
@@ -252,9 +259,11 @@ class Tracker(object):
 
         self.new_clear_threshold[cam_id] = threading.Event()
         self.new_diff_threshold[cam_id] = threading.Event()
+        self.new_roi2_radius[cam_id] = threading.Event()
 
         self.clear_threshold_value[cam_id] = ra.clear_threshold
-        self.clear_threshold_value[cam_id] = ra.diff_threshold
+        self.diff_threshold_value[cam_id] = ra.diff_threshold
+        self.roi2_radius_value[cam_id] = ra.roi2_radius
 
         ctrl = xrc.XRCCTRL(per_cam_panel,"CLEAR_THRESHOLD")
         validator = self.xrcid2validator[cam_id]["CLEAR_THRESHOLD"]
@@ -266,8 +275,18 @@ class Tracker(object):
         ctrl.SetValue( '%d'%ra.diff_threshold )
         validator.set_state('valid')
 
+        ctrl = xrc.XRCCTRL(per_cam_panel,"ROI2_RADIUS")
+        validator = self.xrcid2validator[cam_id]["ROI2_RADIUS"]
+        ctrl.SetValue( '%d'%ra.roi2_radius )
+        validator.set_state('valid')
+
         max_frame_size = FastImage.Size( max_width, max_height )
         self.max_frame_size[cam_id] = max_frame_size
+
+        bunch.inverse_alpha = SharedValue()
+        bunch.inverse_alpha.set( float(xrc.XRCCTRL(per_cam_panel,"INVERSE_ALPHA").GetValue()) )
+        bunch.n_sigma = SharedValue()
+        bunch.n_sigma.set( float(xrc.XRCCTRL(per_cam_panel,"N_SIGMA").GetValue()) )
 
         bunch.initial_take_bg_state = None
 
@@ -308,25 +327,11 @@ class Tracker(object):
         self.clear_and_take_bg_image[cam_id].set()
         self.display_message('capturing background image')
 
-    def OnSetNumBackgroundImages(self,event):
-        widget = event.GetEventObject()
-        cam_id = self.widget2cam_id[widget]
-        val = int(widget.GetValue())
-        self.ongoing_bg_image_num_images[cam_id].set(val)
-
     def OnSetBackgroundUpdateInterval(self,event):
         widget = event.GetEventObject()
         cam_id = self.widget2cam_id[widget]
         val = int(widget.GetValue())
         self.ongoing_bg_image_update_interval[cam_id].set(val)
-
-    def OnTrackingEnabled(self,event):
-        widget = event.GetEventObject()
-        cam_id = self.widget2cam_id[widget]
-        if widget.IsChecked():
-            self.tracking_enabled[cam_id].set()
-        else:
-            self.tracking_enabled[cam_id].clear()
 
     def OnClearThreshold(self,event):
         widget = event.GetEventObject()
@@ -358,6 +363,49 @@ class Tracker(object):
             self.display_message('set difference threshold %d'%newval)
         event.Skip()
 
+    def OnRoi2Radius(self,event):
+        widget = event.GetEventObject()
+        cam_id = self.widget2cam_id[widget]
+        newvalstr = widget.GetValue()
+        try:
+            newval = int(newvalstr)
+        except ValueError:
+            pass
+        else:
+            # only touch realtime_analysis in other thread
+            self.roi2_radius_value[cam_id] = newval
+            self.new_roi2_radius[cam_id].set()
+            self.display_message('set UFMF window size %d'%newval)
+        event.Skip()
+
+    def OnInverseAlpha(self,event):
+        widget = event.GetEventObject()
+        cam_id = self.widget2cam_id[widget]
+        bunch = self.bunches[cam_id]
+
+        newvalstr = widget.GetValue()
+        try:
+            newval = float(newvalstr)
+        except ValueError:
+            pass
+        else:
+            bunch.inverse_alpha.set( newval )
+        event.Skip()
+
+    def OnNSigma(self,event):
+        widget = event.GetEventObject()
+        cam_id = self.widget2cam_id[widget]
+        bunch = self.bunches[cam_id]
+
+        newvalstr = widget.GetValue()
+        try:
+            newval = float(newvalstr)
+        except ValueError:
+            pass
+        else:
+            bunch.n_sigma.set( newval )
+        event.Skip()
+
     def process_frame(self,cam_id,buf,buf_offset,timestamp,framenumber):
         if self.pixel_format[cam_id]=='YUV422':
             buf = imops.yuv422_to_mono8( numpy.asarray(buf) ) # convert
@@ -380,6 +428,7 @@ class Tracker(object):
 
         new_clear_threshold = self.new_clear_threshold[cam_id]
         new_diff_threshold = self.new_diff_threshold[cam_id]
+        new_roi2_radius = self.new_roi2_radius[cam_id]
         realtime_analyzer = self.realtime_analyzer[cam_id]
         realtime_analyzer.roi = lbrt # hardware ROI
         max_frame_size = self.max_frame_size[cam_id]
@@ -436,8 +485,8 @@ class Tracker(object):
         if do_bg_maint:
             hw_roi_frame = fibuf
             cur_fisize = hw_roi_frame.size
-            bg_frame_alpha = 1.0/50.0
-            n_sigma = 5.0
+            bg_frame_alpha = 1.0/bunch.inverse_alpha.get_nowait()
+            n_sigma = bunch.n_sigma.get_nowait()
             bright_non_gaussian_cutoff = 255
             bright_non_gaussian_replacement = 255
 
@@ -498,17 +547,21 @@ class Tracker(object):
             #print 'set diff',nv
             new_diff_threshold.clear()
 
+        if new_roi2_radius.isSet():
+            nv = self.roi2_radius_value[cam_id]
+            realtime_analyzer.roi2_radius = nv
+            new_roi2_radius.clear()
+
         n_pts = 0
-        if self.tracking_enabled[cam_id].isSet():
+        if ufmf_writer is not None:
             points = realtime_analyzer.do_work(fibuf,
                                                timestamp, framenumber, use_roi2,
                                                use_cmp=use_cmp)
-
-            if ufmf_writer is not None:
-                pts = []
-                for pt in points:
-                    pts.append( (pt[0], pt[1], 20, 20) ) # 20=roi width, height
-                ufmf_writer.add_frame( fibuf, timestamp, pts )
+            pts = []
+            w = h = realtime_analyzer.roi2_radius
+            for pt in points:
+                pts.append( (pt[0], pt[1], w, h ) )
+            ufmf_writer.add_frame( fibuf, timestamp, pts )
 
         return draw_points, draw_linesegs
 
