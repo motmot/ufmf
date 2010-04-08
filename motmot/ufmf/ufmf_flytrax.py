@@ -3,7 +3,6 @@ from __future__ import division
 import sys, threading, Queue, time, socket, math, struct, os
 import pkg_resources
 
-import motmot.wxvideo.wxvideo as wxvideo
 import motmot.imops.imops as imops
 import motmot.FastImage.FastImage as FastImage
 
@@ -23,6 +22,9 @@ RES = xrc.EmptyXmlResource()
 RES.LoadFromString(open(RESFILE).read())
 BGROI_IM=True
 DEBUGROI_IM=True
+
+class BunchClass(object):
+    pass
 
 class BufferAllocator:
     def __call__(self, w, h):
@@ -77,14 +79,10 @@ class Tracker(object):
 
         self.cam_ids = []
         self.pixel_format = {}
+        self.bunches = {}
 
         self.use_roi2 = {}
 
-        self.view_mask_mode = {}
-        self.newmask = {}
-
-        self.data_queues = {}
-        self.wxmessage_queues = {}
         self.ufmf_writer = {}
 
         self.clear_and_take_bg_image = {}
@@ -97,8 +95,6 @@ class Tracker(object):
         self.tracking_enabled = {}
         self.realtime_analyzer = {}
         self.max_frame_size = {}
-        self.full_frame_live = {}
-        self.running_mean_im = {}
 
         self.clear_threshold_value = {}
         self.new_clear_threshold = {}
@@ -107,23 +103,10 @@ class Tracker(object):
         self.history_buflen_value = {}
         self.display_active = {}
 
-        self.mask_x_center = {}
-        self.mask_y_center = {}
-        self.mask_radius = {}
-
-        self.realtime_mask_x_center = {} # only touch in RT thread
-        self.realtime_mask_y_center = {} # only touch in RT thread
-        self.realtime_mask_radius = {} # only touch in RT thread
-
-        self.new_mask_x_center = {}
-        self.new_mask_y_center = {}
-        self.new_mask_radius = {}
-
         self.save_status_widget = {}
         self.save_data_prefix_widget = {}
 
         self.widget2cam_id = {}
-        self.edit_mask_dlg = {}
 
         self.image_update_lock = threading.Lock()
 
@@ -138,43 +121,6 @@ class Tracker(object):
         self.per_cam_panel = {}
 
         self.ticks_since_last_update = {}
-
-        if 1:
-            # live view
-            live_roi_view_panel = xrc.XRCCTRL(self.frame,"LIVE_ROI_VIEW_PANEL")
-            box = wx.BoxSizer(wx.VERTICAL)
-            live_roi_view_panel.SetSizer(box)
-
-            self.live_canvas = wxvideo.DynamicImageCanvas(live_roi_view_panel,-1)
-            #self.live_canvas.set_clipping( False ) # faster without clipping
-
-            box.Add(self.live_canvas,1,wx.EXPAND)
-            live_roi_view_panel.SetAutoLayout(True)
-            live_roi_view_panel.Layout()
-
-        if 1:
-            # bgroi view
-            bgroi_view_panel = xrc.XRCCTRL(self.frame,"BGROI_VIEW_PANEL")
-            box = wx.BoxSizer(wx.VERTICAL)
-            bgroi_view_panel.SetSizer(box)
-
-            self.bgroi_canvas = wxvideo.DynamicImageCanvas(bgroi_view_panel,-1)
-
-            box.Add(self.bgroi_canvas,1,wx.EXPAND)
-            bgroi_view_panel.SetAutoLayout(True)
-            bgroi_view_panel.Layout()
-
-        if 1:
-            # debugroi view
-            debugroi_view_panel = xrc.XRCCTRL(self.frame,"DIFF_VIEW_PANEL")
-            box = wx.BoxSizer(wx.VERTICAL)
-            debugroi_view_panel.SetSizer(box)
-
-            self.debugroi_canvas = wxvideo.DynamicImageCanvas(debugroi_view_panel,-1)
-
-            box.Add(self.debugroi_canvas,1,wx.EXPAND)
-            debugroi_view_panel.SetAutoLayout(True)
-            debugroi_view_panel.Layout()
 
         self.roi_sz_lock = threading.Lock()
         self.roi_display_sz = FastImage.Size( 100, 100 ) # width, height
@@ -211,13 +157,6 @@ class Tracker(object):
 
 #######################
 
-
-        ID_Timer = wx.NewId()
-        self.timer = wx.Timer(self.wx_parent, ID_Timer)
-        wx.EVT_TIMER(self.wx_parent, ID_Timer, self.OnServiceIncomingData)
-        self.update_interval=200 # 5 times per sec
-        self.timer.Start(self.update_interval)
-
         ID_Timer = wx.NewId()
         self.timer_clear_message = wx.Timer(self.wx_parent, ID_Timer)
         wx.EVT_TIMER(self.wx_parent, ID_Timer, self.OnClearMessage)
@@ -251,20 +190,6 @@ class Tracker(object):
         finally:
             self.roi_sz_lock.release()
 
-    def set_view_flip_LR( self, val ):
-        self.live_canvas.set_flip_LR(val)
-        if BGROI_IM:
-            self.bgroi_canvas.set_flip_LR(val)
-        if DEBUGROI_IM:
-            self.debugroi_canvas.set_flip_LR(val)
-
-    def set_view_rotate_180(self,val):
-        self.live_canvas.set_rotate_180(val)
-        if BGROI_IM:
-            self.bgroi_canvas.set_rotate_180(val)
-        if DEBUGROI_IM:
-            self.debugroi_canvas.set_rotate_180(val)
-
     def camera_starting_notification(self,
                                      cam_id,
                                      pixel_format=None,
@@ -277,6 +202,9 @@ class Tracker(object):
         """
         self.xrcid2validator[cam_id] = {}
 
+        bunch = BunchClass()
+
+        self.bunches[cam_id]=bunch
         self.pixel_format[cam_id]=pixel_format
         # setup GUI stuff
         if len(self.cam_ids)==0:
@@ -389,48 +317,6 @@ class Tracker(object):
 
 #####################
 
-        ctrl = xrc.XRCCTRL(per_cam_panel,"EDIT_MASK_BUTTON")
-        self.widget2cam_id[ctrl]=cam_id
-        ctrl.Bind( wx.EVT_BUTTON, self.OnEditMask )
-
-        ##############
-        self.edit_mask_dlg[cam_id] = RES.LoadDialog(per_cam_panel,"EDIT_MASK_DIALOG")
-
-        view_mask_mode_widget = xrc.XRCCTRL(self.edit_mask_dlg[cam_id],"VIEW_MASK_CHECKBOX")
-        self.widget2cam_id[view_mask_mode_widget]=cam_id
-        wx.EVT_CHECKBOX(view_mask_mode_widget,
-                        view_mask_mode_widget.GetId(),
-                        self.OnViewMaskMode)
-
-        self.new_mask_x_center[cam_id] = max_width//2
-        self.new_mask_y_center[cam_id] = max_height//2
-        self.new_mask_radius[cam_id] = max(max_width,max_height)
-
-        mask_x_center_widget = xrc.XRCCTRL(self.edit_mask_dlg[cam_id], "MASK_X_CENTER")
-        self.widget2cam_id[mask_x_center_widget]=cam_id
-        wx.EVT_COMMAND_SCROLL(mask_x_center_widget,
-                              mask_x_center_widget.GetId(),
-                              self.OnScrollMaskXCenter)
-        mask_x_center_widget.SetRange(0,max_width-1)
-        mask_x_center_widget.SetValue(self.new_mask_x_center[cam_id])
-
-        mask_y_center_widget = xrc.XRCCTRL(self.edit_mask_dlg[cam_id], "MASK_Y_CENTER")
-        self.widget2cam_id[mask_y_center_widget]=cam_id
-        wx.EVT_COMMAND_SCROLL(mask_y_center_widget,
-                              mask_y_center_widget.GetId(),
-                              self.OnScrollMaskYCenter)
-        mask_y_center_widget.SetRange(0,max_height-1)
-        mask_y_center_widget.SetValue(self.new_mask_y_center[cam_id])
-
-        mask_radius_widget = xrc.XRCCTRL(self.edit_mask_dlg[cam_id], "MASK_RADIUS")
-        self.widget2cam_id[mask_radius_widget]=cam_id
-        wx.EVT_COMMAND_SCROLL(mask_radius_widget,
-                              mask_radius_widget.GetId(),
-                              self.OnScrollMaskRadius)
-        mask_radius_widget.SetRange(0,max(max_width,max_height)-1)
-        mask_radius_widget.SetValue(self.new_mask_radius[cam_id])
-        ##############
-
         # setup non-GUI stuff
         max_num_points = 1
         self.cam_ids.append(cam_id)
@@ -441,11 +327,6 @@ class Tracker(object):
         else:
             self.display_active[cam_id].set()
 
-        self.view_mask_mode[cam_id] = threading.Event()
-        self.newmask[cam_id] = SharedValue()
-
-        self.data_queues[cam_id] = Queue.Queue()
-        self.wxmessage_queues[cam_id] = Queue.Queue()
         self.clear_and_take_bg_image[cam_id] = threading.Event()
         self.enable_ongoing_bg_image[cam_id] = threading.Event()
 
@@ -489,19 +370,25 @@ class Tracker(object):
 
         max_frame_size = FastImage.Size( max_width, max_height )
         self.max_frame_size[cam_id] = max_frame_size
-        self.full_frame_live[cam_id] = FastImage.FastImage8u( max_frame_size )
-        self.running_mean_im[cam_id] = FastImage.FastImage32f( max_frame_size)
+
+        bunch.initial_take_bg_state = None
+
+        bunch.running_mean_im_full = FastImage.FastImage32f(max_frame_size)
+        bunch.running_sumsqf_full = FastImage.FastImage32f(max_frame_size)
+        bunch.running_sumsqf_full.set_val(0,max_frame_size)
+        bunch.fastframef32_tmp_full = FastImage.FastImage32f(max_frame_size)
+        bunch.mean2_full = FastImage.FastImage32f(max_frame_size)
+        bunch.std2_full = FastImage.FastImage32f(max_frame_size)
+        bunch.running_stdframe_full = FastImage.FastImage32f(max_frame_size)
+        bunch.noisy_pixels_mask_full = FastImage.FastImage8u(max_frame_size)
+
+        bunch.last_running_mean_im = None
 
     def get_buffer_allocator(self,cam_id):
         return BufferAllocator()
 
     def get_plugin_name(self):
         return 'UFMF FlyTrax'
-
-    def OnEditMask(self,event):
-        widget = event.GetEventObject()
-        cam_id = self.widget2cam_id[widget]
-        self.edit_mask_dlg[cam_id].Show()
 
     def OnSaveNthFrame(self,event=None,force_cam_id=None):
         if event is None:
@@ -626,78 +513,6 @@ class Tracker(object):
             self.history_buflen_value[cam_id] = newval
         event.Skip()
 
-    def OnViewMaskMode(self,event):
-        widget = event.GetEventObject()
-        cam_id = self.widget2cam_id[widget]
-        if widget.IsChecked():
-            self.view_mask_mode[cam_id].set()
-        else:
-            self.view_mask_mode[cam_id].clear()
-
-    def OnScrollMaskXCenter(self,event):
-        widget = event.GetEventObject()
-        cam_id = self.widget2cam_id[widget]
-        self.new_mask_x_center[cam_id] = widget.GetValue()
-
-    def OnScrollMaskYCenter(self,event):
-        widget = event.GetEventObject()
-        cam_id = self.widget2cam_id[widget]
-        self.new_mask_y_center[cam_id] = widget.GetValue()
-
-    def OnScrollMaskRadius(self,event):
-        widget = event.GetEventObject()
-        cam_id = self.widget2cam_id[widget]
-        self.new_mask_radius[cam_id] = widget.GetValue()
-
-    def _process_frame_extract_roi( self, points, roi_sz,
-                                    fibuf, buf_offset, full_frame_live,
-                                    max_frame_size):
-        # called from self.process_frame()
-        n_pts = len(points)
-
-        if n_pts:
-            pt = points[0] # only operate on first point
-            (x,y,area,slope,eccentricity)=pt[:5]
-
-            # find software ROI
-            rx = int(round(x))
-            x0=rx-roi_sz.w//2
-            x1=x0+roi_sz.w
-            if x0<0:
-                x0=0
-            elif x1>=max_frame_size.w:
-                x0=max_frame_size.w-roi_sz.w
-                x1=max_frame_size.w
-
-            ry = int(round(y))
-            y0=ry-roi_sz.h//2
-            y1=y0+roi_sz.h
-            if y0<0:
-                y0=0
-            elif y1>=max_frame_size.h:
-                y0=max_frame_size.h-roi_sz.h
-                y1=max_frame_size.h
-
-        else: # no points found
-            x0 = 0
-            y0 = 0
-
-        # extract smaller image for saving
-        if fibuf.size == max_frame_size:
-            software_roi = fibuf.roi( x0, y0, roi_sz )
-        else:
-            # make sure we can do software_roi size live view
-            # 1. make full frame "live view"
-            l,b = buf_offset
-            roi_into_full_frame = full_frame_live.roi( l,b, fibuf.size )
-            fibuf.get_8u_copy_put(roi_into_full_frame,fibuf.size)
-            # 2. get software_roi view into it
-            tmp = full_frame_live.roi( x0, y0, roi_sz )
-            # 3. make copy of software_roi
-            software_roi = tmp.get_8u_copy(tmp.size) # copy
-
-        return software_roi, (x0,y0)
-
     def process_frame(self,cam_id,buf,buf_offset,timestamp,framenumber):
         if self.pixel_format[cam_id]=='YUV422':
             buf = imops.yuv422_to_mono8( numpy.asarray(buf) ) # convert
@@ -705,27 +520,25 @@ class Tracker(object):
             warnings.warn("flytrax plugin incompatible with data format")
             return [], []
 
-        self.ticks_since_last_update[cam_id] += 1
-        start = time.time()
+
+        bunch = self.bunches[cam_id]
+        do_bg_maint = False
+        clear_and_take_bg_image = self.clear_and_take_bg_image[cam_id]
+
         # this is called in realtime thread
         fibuf = FastImage.asfastimage(buf) # FastImage view of image data (hardware ROI)
         l,b = buf_offset
         lbrt = l, b, l+fibuf.size.w-1, b+fibuf.size.h-1
 
-        view_mask_mode = self.view_mask_mode[cam_id]
-        newmask = self.newmask[cam_id]
+        running_mean_im = bunch.running_mean_im_full.roi(l, b, fibuf.size)  # set ROI view
+        running_sumsqf = bunch.running_sumsqf_full.roi(l, b, fibuf.size)  # set ROI view
 
-        clear_and_take_bg_image = self.clear_and_take_bg_image[cam_id]
         enable_ongoing_bg_image = self.enable_ongoing_bg_image[cam_id]
-        data_queue = self.data_queues[cam_id] # transfers images and data to non-realtime thread
-        wxmessage_queue = self.wxmessage_queues[cam_id] # transfers and messages to non-realtime thread
         new_clear_threshold = self.new_clear_threshold[cam_id]
         new_diff_threshold = self.new_diff_threshold[cam_id]
         realtime_analyzer = self.realtime_analyzer[cam_id]
         realtime_analyzer.roi = lbrt # hardware ROI
         max_frame_size = self.max_frame_size[cam_id]
-        full_frame_live = self.full_frame_live[cam_id]
-        running_mean_im = self.running_mean_im[cam_id]
         display_active = self.display_active[cam_id]
 
         history_buflen_value = self.history_buflen_value[cam_id]
@@ -735,83 +548,101 @@ class Tracker(object):
         draw_points = []
         draw_linesegs = []
 
-        if newmask.is_new_value_waiting():
-            (x,y,radius), newmask_im = newmask.get_nowait()
+        running_mean8u_im_full = realtime_analyzer.get_image_view('mean')
+        running_mean8u_im = running_mean8u_im_full.roi(l, b, fibuf.size)
 
-            self.realtime_mask_x_center[cam_id]=x
-            self.realtime_mask_y_center[cam_id]=y
-            self.realtime_mask_radius[cam_id]=radius
+        if (bunch.initial_take_bg_state is not None or 
+            clear_and_take_bg_image.isSet()):
+            src_fullframe_fi = fibuf.get_8u_copy(max_frame_size)
 
-            newmask_fi = FastImage.asfastimage( newmask_im )
-            assert newmask_fi.size == max_frame_size
-            mask_im = realtime_analyzer.get_image_view('mask')
-            newmask_fi.get_8u_copy_put(mask_im, max_frame_size)
+        if bunch.initial_take_bg_state is not None:
+            assert bunch.initial_take_bg_state == 'gather'
 
-        if view_mask_mode.isSet():
+            n_initial_take = 5
+            bunch.initial_take_frames.append( numpy.array(src_fullframe_fi) ) # copied above
+            if len( bunch.initial_take_frames ) >= n_initial_take:
 
-            w,h = max_frame_size.w, max_frame_size.h
-            x=self.realtime_mask_x_center.get(cam_id, w//2)
-            y=self.realtime_mask_y_center.get(cam_id, h//2)
-            radius=self.realtime_mask_radius.get(cam_id, max(w,h))
+                initial_take_frames = numpy.array( bunch.initial_take_frames, dtype=numpy.float32 )
+                mean_frame = numpy.mean( initial_take_frames, axis=0)
+                sumsqf_frame = numpy.sum(initial_take_frames**2, axis=0)/len( initial_take_frames )
 
-            N = 64
-            theta = numpy.arange(N)*2*math.pi/N
-            xdraw = x+numpy.cos(theta)*radius
-            ydraw = y+numpy.sin(theta)*radius
-            for i in range(N-1):
-                draw_linesegs.append(
-                    (xdraw[i],ydraw[i],xdraw[i+1],ydraw[i+1]))
-            draw_linesegs.append(
-                (xdraw[-1],ydraw[-1],xdraw[0],ydraw[0]))
+                numpy.asarray(running_mean_im)[:,:] = mean_frame
+                numpy.asarray(running_sumsqf)[:,:] = sumsqf_frame
+
+                # we're done with initial transient, set stuff
+                do_bg_maint = True
+                bunch.initial_take_bg_state = None
+                bunch.initial_take_frames = []
 
         if clear_and_take_bg_image.isSet():
-            # this is a view we write into
-            # copy current image into background image
-            running_mean8u_im = realtime_analyzer.get_image_view('mean')
-            if running_mean8u_im.size == fibuf.size:
-                srcfi = fibuf
-                bg_copy = srcfi.get_8u_copy(max_frame_size)
-            else:
-                srcfi = FastImage.FastImage8u(max_frame_size)
-                srcfi_roi = srcfi.roi(l,b,fibuf.size)
-                fibuf.get_8u_copy_put(srcfi_roi, fibuf.size)
-                bg_copy = srcfi # newly created, no need to copy
-
-            srcfi.get_32f_copy_put( running_mean_im,   max_frame_size )
-            srcfi.get_8u_copy_put(  running_mean8u_im, max_frame_size )
-
-            # make copy available for saving data
-            self.bg_update_lock.acquire()
-            self.full_bg_image[cam_id] = bg_copy
-            self.bg_update_lock.release()
-
-            clear_and_take_bg_image.clear()
-            del srcfi, bg_copy # don't pollute namespace
+            bunch.initial_take_bg_state = 'gather'
+            bunch.initial_take_frames = [ numpy.array(src_fullframe_fi) ]
+            with self.bg_update_lock:
+                bunch.last_running_mean_im = None
 
         if enable_ongoing_bg_image.isSet():
+            self.ticks_since_last_update[cam_id] += 1
 
             update_interval = self.ongoing_bg_image_update_interval[cam_id].get()
             if self.ticks_since_last_update[cam_id]%update_interval == 0:
-                alpha = 1.0/self.ongoing_bg_image_num_images[cam_id].get()
-                if running_mean_im.size == fibuf.size:
-                    srcfi = fibuf
-                else:
-                    # This is inelegant (it creates a full frame), but it works.
-                    srcfi = FastImage.FastImage8u(max_frame_size)
-                    srcfi_roi = srcfi.roi(l,b,fibuf.size)
-                    fibuf.get_8u_copy_put(srcfi_roi, fibuf.size)
-                    
-                running_mean8u_im = realtime_analyzer.get_image_view('mean')
-                # maintain running average
-                running_mean_im.toself_add_weighted( srcfi, max_frame_size, alpha )
-                # maintain 8bit unsigned background image
-                running_mean_im.get_8u_copy_put( running_mean8u_im, max_frame_size )
+                do_bg_maint = True
 
-                # make copy available for saving data
-                bg_copy = running_mean_im.get_8u_copy(running_mean_im.size)
-                self.bg_update_lock.acquire()
-                self.full_bg_image[cam_id] = bg_copy
-                self.bg_update_lock.release()
+        ufmf_writer = self.ufmf_writer.get(cam_id,None)
+
+        if do_bg_maint:
+            hw_roi_frame = fibuf
+            cur_fisize = hw_roi_frame.size
+            bg_frame_alpha = 1.0/50.0
+            n_sigma = 5.0
+            bright_non_gaussian_cutoff = 255
+            bright_non_gaussian_replacement = 255
+
+            compareframe8u_full = realtime_analyzer.get_image_view('cmp')
+            compareframe8u = compareframe8u_full.roi(l, b, fibuf.size)
+            fastframef32_tmp = bunch.fastframef32_tmp_full.roi(l, b, fibuf.size)
+
+            mean2 = bunch.mean2_full.roi(l, b, fibuf.size)
+            std2  =  bunch.std2_full.roi(l, b, fibuf.size)
+            running_stdframe = bunch.running_stdframe_full.roi(l, b, fibuf.size)
+
+            noisy_pixels_mask = bunch.noisy_pixels_mask_full.roi(l, b, fibuf.size)
+
+            sys.stdout.write('B')
+            sys.stdout.flush()
+            realtime_image_analysis.do_bg_maint(
+                running_mean_im,#in
+                hw_roi_frame,#in
+                cur_fisize,#in
+                bg_frame_alpha, #in
+                running_mean8u_im,
+                fastframef32_tmp,
+                running_sumsqf, #in
+                mean2,
+                std2,
+                running_stdframe,
+                n_sigma,#in
+                compareframe8u,
+                bright_non_gaussian_cutoff,#in
+                noisy_pixels_mask,#in
+                bright_non_gaussian_replacement,#in
+                bench=0 )
+                #debug=0)
+            #chainbuf.real_std_est= tmpresult
+            bg_changed = True
+            bg_frame_number = 0
+
+            with self.bg_update_lock:
+                bunch.last_running_mean_im = running_mean_im
+                bunch.last_running_sumsqf_image = running_sumsqf
+                bunch.last_bgcmp_image_timestamp = timestamp
+
+            if ufmf_writer is not None:
+                ufmf_writer.add_keyframe('mean',
+                                         running_mean_im,
+                                         timestamp)
+                ufmf_writer.add_keyframe('sumsq',
+                                         running_sumsqf,
+                                         timestamp)
 
         if new_clear_threshold.isSet():
             nv = self.clear_threshold_value[cam_id]
@@ -838,50 +669,11 @@ class Tracker(object):
             finally:
                 self.roi_sz_lock.release()
 
-            roi_display, (display_x0, display_y0) = self._process_frame_extract_roi(
-                points, roi_display_sz,
-                fibuf, buf_offset, full_frame_live,
-                max_frame_size)
-            roi_save_fmf, (fmf_save_x0, fmf_save_y0) = self._process_frame_extract_roi(
-                points, roi_save_fmf_sz,
-                fibuf, buf_offset, full_frame_live,
-                max_frame_size)
-
-            n_pts = len(points)
-
-            if n_pts:
-                pt = points[0] # only operate on first point
-                (x,y,area,slope,eccentricity)=pt[:5]
-
-                # put data in queue for saving
-                numdata = (x,y, slope, fmf_save_x0, fmf_save_y0, timestamp, area, framenumber)
-                data = (roi_save_fmf, numdata)
-                data_queue.put( data )
-
-            if BGROI_IM:
-                running_mean8u_im = realtime_analyzer.get_image_view('mean')
-                tmp = running_mean8u_im.roi( display_x0, display_y0, self.roi_display_sz )
-                bgroi = tmp.get_8u_copy(tmp.size) # copy
-
-            if DEBUGROI_IM:
-                absdiff_im = realtime_analyzer.get_image_view('absdiff')
-                tmp = absdiff_im.roi( display_x0, display_y0, self.roi_display_sz )
-                debugroi = tmp.get_8u_copy(tmp.size) # copy
-
-            # live display of image
-            if display_active.isSet():
-                self.image_update_lock.acquire()
-                self.last_image = roi_display
-                self.last_image_cam_id = cam_id
-                self.last_image_format = 'MONO8' # forced in this routine
-                self.last_points = points
-                self.roi_display_lb = display_x0,display_y0
-                self.new_image = True
-                if BGROI_IM:
-                    self.bgroi_image = bgroi
-                if DEBUGROI_IM:
-                    self.debugroi_image = debugroi
-                self.image_update_lock.release()
+            if ufmf_writer is not None:
+                pts = []
+                for pt in points:
+                    pts.append( (pt[0], pt[1], 20, 20) ) # 20=roi width, height
+                ufmf_writer.add_frame( fibuf, timestamp, pts )
 
         if n_pts:
             self.last_detection_list.append((x,y))
@@ -898,81 +690,6 @@ class Tracker(object):
 
     def OnClearMessage(self,evt):
         self.status_message.SetLabel('')
-
-    def OnServiceIncomingData(self, evt):
-        for cam_id in self.cam_ids:
-            data_queue = self.data_queues[cam_id]
-            ufmf_writer = self.ufmf_writer.get(cam_id,None)
-            try:
-                while 1:
-                    data = data_queue.get(False) # don't block
-                    if ufmf_writer is not None: # saving data
-                        roi_img, numdata = data
-                        (posx, posy, orientation, windowx, windowy, timestamp, area, framenumber) = numdata
-                        if framenumber%self.save_nth_frame[cam_id] == 0:
-                            ufmf_writer.write_data(roi_img=roi_img,
-                                                   posx=posx,posy=posy,
-                                                   orientation=orientation,
-                                                   windowx=windowx,windowy=windowy,
-                                                   timestamp=timestamp,
-                                                   area=area)
-            except Queue.Empty:
-                pass
-        self.update_screen()
-
-        # show any messages
-        msgs = []
-        for cam_id in self.cam_ids:
-            wxmessage_queue = self.wxmessage_queues[cam_id]
-            try:
-                while 1:
-                    msg = wxmessage_queue.get(False) # don't block
-                    msgs.append(msg)
-            except Queue.Empty:
-                pass
-        for text,title,flags in msgs:
-            dlg = wx.MessageDialog(self.wx_parent,text,title,flags)
-            try:
-                dlg.ShowModal()
-            finally:
-                dlg.Destroy()
-
-        # calculate masks (only do occasionally, expensive)
-        for cam_id in self.cam_ids:
-            changed=False
-            if self.new_mask_x_center[cam_id] is not None:
-                changed=True
-                self.mask_x_center[cam_id] = self.new_mask_x_center[cam_id]
-                self.new_mask_x_center[cam_id] = None
-
-            if self.new_mask_y_center[cam_id] is not None:
-                changed=True
-                self.mask_y_center[cam_id] = self.new_mask_y_center[cam_id]
-                self.new_mask_y_center[cam_id] = None
-
-            if self.new_mask_radius[cam_id] is not None:
-                changed=True
-                self.mask_radius[cam_id] = self.new_mask_radius[cam_id]
-                self.new_mask_radius[cam_id] = None
-
-            if changed:
-                a = self.mask_x_center[cam_id]
-                b = self.mask_y_center[cam_id]
-                c = self.mask_radius[cam_id]
-                x,y,radius=a,b,c
-                #print 'recalculating mask: X %d, Y %d, r %d'%(a,b,c)
-
-                width = self.max_frame_size[cam_id].w
-                height = self.max_frame_size[cam_id].h
-
-                X = numpy.arange(width,dtype=numpy.float32)
-                Y = numpy.arange(height,dtype=numpy.float32)
-                Y.shape = (Y.shape[0],1)
-                X.shape = (1,X.shape[0])
-                vals = (X-a)**2+(Y-b)**2 - c**2
-                circim = numpy.zeros((height,width),dtype=numpy.uint8)
-                circim[vals>0]=255
-                self.newmask[cam_id].set(((x,y,radius),circim))
 
     def OnStartRecording(self,event):
         widget = event.GetEventObject()
@@ -991,22 +708,15 @@ class Tracker(object):
         ctrl = xrc.XRCCTRL(self.options_dlg,'ROI_SAVE_FMF_HEIGHT')
         ctrl.Enable(False)
 
+        bunch = self.bunches[cam_id]
+
         # grab background image from other thread
-        self.bg_update_lock.acquire()
-        bg_image = self.full_bg_image.get(cam_id,None)
-        self.bg_update_lock.release()
+        with self.bg_update_lock:
+            last_running_mean_im = bunch.last_running_mean_im
+            if last_running_mean_im is not None:
+                last_bgcmp_image_timestamp = bunch.last_bgcmp_image_timestamp
+                last_running_sumsqf_image = bunch.last_running_sumsqf_image
 
-        if bg_image is None:
-            dlg = wx.MessageDialog(self.wx_parent,
-                                   'No background image (%s)- cannot save data'%cam_id,
-                                   'UFMF FlyTrax error',
-                                   wx.OK | wx.ICON_ERROR
-                                   )
-            dlg.ShowModal()
-            dlg.Destroy()
-            return
-
-        cam_id = self.last_image_cam_id
         prefix = self.save_data_prefix_widget[cam_id].GetValue()
         fname = prefix+time.strftime('%Y%m%d_%H%M%S.ufmf')
         ufmf_writer = ufmf.AutoShrinkUfmfSaverV3( fname,
@@ -1014,10 +724,11 @@ class Tracker(object):
                                                   max_width=self.max_frame_size[cam_id].w,
                                                   max_height=self.max_frame_size[cam_id].h,
                                                   )
-        running_mean_im = self.running_mean_im[cam_id]
-        if running_mean_im is not None:
+        bunch = self.bunches[cam_id]
+
+        if last_running_mean_im is not None:
             ufmf_writer.add_keyframe('mean',
-                                     running_mean_im,
+                                     last_running_mean_im,
                                      last_bgcmp_image_timestamp)
             ufmf_writer.add_keyframe('sumsq',
                                      last_running_sumsqf_image,
@@ -1050,123 +761,3 @@ class Tracker(object):
     def quit(self):
         for ufmf_writer in self.ufmf_writer.itervalues():
             ufmf_writer.close() # make sure all data savers close nicely
-
-    def update_screen(self):
-        """Draw on screen
-
-        Called from wx thread by timer. Grabs data from realtime
-        thread respecting locks.
-        """
-        self.image_update_lock.acquire()
-        if self.new_image:
-            have_new_image = True
-            # Get data from other thread as quickly as possible and
-            # release lock.
-            cam_id = self.last_image_cam_id
-            format = self.last_image_format
-            im = self.last_image
-            if BGROI_IM:
-                bgroi_im = self.bgroi_image
-            if DEBUGROI_IM:
-                debugroi_im = self.debugroi_image
-            orig_points = self.last_points
-            roi_display_left,roi_display_bottom = self.roi_display_lb
-            self.new_image = False # reset for next pass
-        else:
-            have_new_image = False
-        self.image_update_lock.release()
-
-        if have_new_image:
-            points = []
-            linesegs = []
-
-            width = im.size.w
-            height = im.size.h
-
-            # this scaling should be moved to wxvideo:
-            if 1:
-                xg = width
-                xo = 0
-            else:
-                xg = -width
-                xo = width-1
-            yg = height
-            yo = 0
-
-            for orig_pt in orig_points:
-
-                ox0,oy0,area,slope,eccentricity = orig_pt[:5]
-                #print '% 8.1f % 8.1f (slope: % 8.1f)'%(ox0, oy0, slope)
-                ox0 = ox0-roi_display_left   # put in display ROI coordinate system
-                oy0 = oy0-roi_display_bottom # put in display ROI coordinate system
-
-
-                # points ================================
-                points.append((ox0,oy0))
-
-                # linesegs ==============================
-                if eccentricity <= self.minimum_eccentricity:
-                    # don't draw green lines -- not much orientation info
-                    continue
-
-                slope=-slope
-                oy0 = height-oy0
-
-                # line segment for orientation
-                xmin = 0
-                ymin = 0
-                xmax = width-1
-                ymax = height-1
-
-                # ax+by+c=0
-                a=slope
-                b=-1
-                c=oy0-a*ox0
-
-                x1=xmin
-                y1=-(c+a*x1)/b
-                if y1 < ymin:
-                    y1 = ymin
-                    x1 = -(c+b*y1)/a
-                elif y1 > ymax:
-                    y1 = ymax
-                    x1 = -(c+b*y1)/a
-
-                x2=xmax
-                y2=-(c+a*x2)/b
-                if y2 < ymin:
-                    y2 = ymin
-                    x2 = -(c+b*y2)/a
-                elif y2 > ymax:
-                    y2 = ymax
-                    x2 = -(c+b*y2)/a
-
-                x1 = x1/width*xg+xo
-                x2 = x2/width*xg+xo
-
-                y1 = (height-y1)/height*yg+yo
-                y2 = (height-y2)/height*yg+yo
-
-                linesegs.append( (int(x1),int(y1),int(x2),int(y2)) )
-
-            self.live_canvas.update_image_and_drawings(
-                'camera', im, format=format,
-                )
-
-            if 1:
-                self.live_canvas.Refresh(eraseBackground=False)
-
-            if BGROI_IM:
-                self.bgroi_canvas.update_image_and_drawings(
-                    'camera', bgroi_im, format=format,
-                    )
-                if 1:
-                    self.bgroi_canvas.Refresh(eraseBackground=False)
-            if DEBUGROI_IM:
-                self.debugroi_canvas.update_image_and_drawings(
-                    'camera', debugroi_im, format=format,
-                    points=points,
-                    linesegs=linesegs,
-                    )
-                if 1:
-                    self.debugroi_canvas.Refresh(eraseBackground=False)

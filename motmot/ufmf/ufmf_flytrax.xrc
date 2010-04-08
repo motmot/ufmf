@@ -314,50 +314,6 @@
             <flag>wxBOTTOM|wxEXPAND</flag>
             <border>5</border>
           </object>
-          <object class="sizeritem">
-            <object class="wxFlexGridSizer">
-              <cols>1</cols>
-              <rows>2</rows>
-              <object class="sizeritem">
-                <object class="wxStaticBoxSizer">
-                  <label>Live view</label>
-                  <orient>wxVERTICAL</orient>
-                  <object class="sizeritem">
-                    <object class="wxPanel" name="LIVE_ROI_VIEW_PANEL">
-                      <size>100,100</size>
-                    </object>
-                    <flag>wxEXPAND</flag>
-                  </object>
-                </object>
-              </object>
-              <object class="sizeritem">
-                <object class="wxStaticBoxSizer">
-                  <label>Live diff</label>
-                  <orient>wxVERTICAL</orient>
-                  <object class="sizeritem">
-                    <object class="wxPanel" name="DIFF_VIEW_PANEL">
-                      <size>100,100</size>
-                    </object>
-                    <flag>wxEXPAND</flag>
-                  </object>
-                </object>
-              </object>
-              <object class="sizeritem">
-                <object class="wxStaticBoxSizer">
-                  <label>Live bg</label>
-                  <orient>wxVERTICAL</orient>
-                  <object class="sizeritem">
-                    <object class="wxPanel" name="BGROI_VIEW_PANEL">
-                      <size>100,100</size>
-                    </object>
-                    <flag>wxEXPAND</flag>
-                  </object>
-                </object>
-              </object>
-            </object>
-            <flag>wxALL|wxEXPAND</flag>
-            <border>5</border>
-          </object>
         </object>
         <option>1</option>
         <flag>wxEXPAND</flag>
