@@ -1,4 +1,5 @@
 from __future__ import division
+from __future__ import with_statement
 
 import sys, threading, Queue, time, socket, math, struct, os
 import pkg_resources
