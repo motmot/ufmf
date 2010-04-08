@@ -21,8 +21,6 @@ import scipy.io
 RESFILE = pkg_resources.resource_filename(__name__,"ufmf_flytrax.xrc") # trigger extraction
 RES = xrc.EmptyXmlResource()
 RES.LoadFromString(open(RESFILE).read())
-BGROI_IM=True
-DEBUGROI_IM=True
 
 class BunchClass(object):
     pass
@@ -82,14 +80,10 @@ class Tracker(object):
         self.pixel_format = {}
         self.bunches = {}
 
-        self.use_roi2 = {}
-
         self.ufmf_writer = {}
 
         self.clear_and_take_bg_image = {}
-        self.enable_ongoing_bg_image = {}
 
-        self.save_nth_frame = {}
         self.ongoing_bg_image_num_images = {}
         self.ongoing_bg_image_update_interval = {}
 
@@ -101,7 +95,6 @@ class Tracker(object):
         self.new_clear_threshold = {}
         self.diff_threshold_value = {}
         self.new_diff_threshold = {}
-        self.history_buflen_value = {}
         self.display_active = {}
 
         self.save_status_widget = {}
@@ -110,8 +103,6 @@ class Tracker(object):
         self.widget2cam_id = {}
 
         self.image_update_lock = threading.Lock()
-
-        self.last_detection_list = [] # only used in realtime thread
 
         self.bg_update_lock = threading.Lock()
 
@@ -123,41 +114,6 @@ class Tracker(object):
 
         self.ticks_since_last_update = {}
 
-        self.roi_sz_lock = threading.Lock()
-        self.roi_display_sz = FastImage.Size( 100, 100 ) # width, height
-        self.roi_save_fmf_sz = FastImage.Size( 100, 100 ) # width, height
-
-###############
-
-        ctrl = xrc.XRCCTRL(self.frame,'EDIT_GLOBAL_OPTIONS')
-        ctrl.Bind( wx.EVT_BUTTON, self.OnEditGlobalOptions)
-        self.options_dlg = RES.LoadDialog(self.frame,"OPTIONS_DIALOG")
-
-        def validate_roi_dimension(value):
-            try:
-                iv = int(value)
-            except ValueError:
-                return False
-            if not 2 <= iv <= 100:
-                return False
-            if not (iv%2)==0:
-                return False
-            return True
-
-        ctrl = xrc.XRCCTRL(self.options_dlg,'ROI_DISPLAY_WIDTH')
-        wxvt.Validator(ctrl,ctrl.GetId(),self.OnSetROI,validate_roi_dimension)
-        ctrl = xrc.XRCCTRL(self.options_dlg,'ROI_DISPLAY_HEIGHT')
-        wxvt.Validator(ctrl,ctrl.GetId(),self.OnSetROI,validate_roi_dimension)
-
-        ctrl = xrc.XRCCTRL(self.options_dlg,'ROI_SAVE_FMF_WIDTH')
-        wxvt.Validator(ctrl,ctrl.GetId(),self.OnSetROI,validate_roi_dimension)
-        ctrl = xrc.XRCCTRL(self.options_dlg,'ROI_SAVE_FMF_HEIGHT')
-        wxvt.Validator(ctrl,ctrl.GetId(),self.OnSetROI,validate_roi_dimension)
-
-        self.OnSetROI(None)
-
-#######################
-
         ID_Timer = wx.NewId()
         self.timer_clear_message = wx.Timer(self.wx_parent, ID_Timer)
         wx.EVT_TIMER(self.wx_parent, ID_Timer, self.OnClearMessage)
@@ -167,29 +123,6 @@ class Tracker(object):
 
     def get_frame(self):
         return self.frame
-
-    def OnEditGlobalOptions(self, event):
-        self.options_dlg.Show()
-
-    def OnSetROI(self,event):
-        names = ['ROI_DISPLAY',
-                 'ROI_SAVE_FMF',
-                 ]
-        topush = {}
-        for name in names:
-            width_ctrl = xrc.XRCCTRL(self.options_dlg, name+'_WIDTH')
-            height_ctrl = xrc.XRCCTRL(self.options_dlg, name+'_HEIGHT')
-            attr = name.lower()+'_sz'
-            w = int(width_ctrl.GetValue())
-            h = int(height_ctrl.GetValue())
-            topush[attr] = (w,h)
-
-        self.roi_sz_lock.acquire()
-        try:
-            for attr,(w,h) in topush.iteritems():
-                setattr(self,attr,FastImage.Size(w,h))
-        finally:
-            self.roi_sz_lock.release()
 
     def camera_starting_notification(self,
                                      cam_id,
@@ -224,11 +157,6 @@ class Tracker(object):
                       ctrl.GetId(),
                       self.OnTakeBgImage)
 
-        ctrl = xrc.XRCCTRL(per_cam_panel,"ONGOING_BG_UPDATES")
-        self.widget2cam_id[ctrl]=cam_id
-        wx.EVT_CHECKBOX(ctrl,ctrl.GetId(),
-                        self.OnEnableOngoingBg)
-
         self.ongoing_bg_image_num_images[cam_id] = LockedValue(20)
         ctrl = xrc.XRCCTRL(per_cam_panel,"NUM_BACKGROUND_IMAGES")
         ctrl.SetValue( str(self.ongoing_bg_image_num_images[cam_id].get() ))
@@ -255,15 +183,6 @@ class Tracker(object):
                         tracking_enabled_widget.GetId(),
                         self.OnTrackingEnabled)
 
-        use_roi2_widget = xrc.XRCCTRL(per_cam_panel,"USE_ROI2")
-        self.widget2cam_id[use_roi2_widget]=cam_id
-        wx.EVT_CHECKBOX(use_roi2_widget,
-                        use_roi2_widget.GetId(),
-                        self.OnUseROI2)
-        self.use_roi2[cam_id] = threading.Event()
-        if use_roi2_widget.IsChecked():
-            self.use_roi2[cam_id].set()
-
         ctrl = xrc.XRCCTRL(per_cam_panel,"CLEAR_THRESHOLD")
         self.widget2cam_id[ctrl]=cam_id
         validator = wxvt.setup_validated_float_callback(
@@ -282,15 +201,6 @@ class Tracker(object):
             ignore_initial_value=True)
         self.xrcid2validator[cam_id]["DIFF_THRESHOLD"] = validator
 
-        ctrl = xrc.XRCCTRL(per_cam_panel,"HISTORY_BUFFER_LENGTH")
-        self.widget2cam_id[ctrl]=cam_id
-        validator = wxvt.setup_validated_integer_callback(
-            ctrl,
-            ctrl.GetId(),
-            self.OnHistoryBuflen,
-            ignore_initial_value=True)
-        self.xrcid2validator[cam_id]["HISTORY_BUFFER_LENGTH"] = validator
-
         start_recording_widget = xrc.XRCCTRL(per_cam_panel,"START_RECORDING")
         self.widget2cam_id[start_recording_widget]=cam_id
         wx.EVT_BUTTON(start_recording_widget,
@@ -305,12 +215,6 @@ class Tracker(object):
 
         save_status_widget = xrc.XRCCTRL(per_cam_panel,"SAVE_STATUS")
         self.save_status_widget[cam_id] = save_status_widget
-
-        ctrl = xrc.XRCCTRL(per_cam_panel,"SAVE_NTH_FRAME")
-        self.widget2cam_id[ctrl]=cam_id
-        wxvt.setup_validated_integer_callback(
-            ctrl,ctrl.GetId(),self.OnSaveNthFrame)
-        self.OnSaveNthFrame(force_cam_id=cam_id)
 
         self.save_data_prefix_widget[cam_id] = xrc.XRCCTRL(
             per_cam_panel,"SAVE_DATA_PREFIX")
@@ -329,7 +233,6 @@ class Tracker(object):
             self.display_active[cam_id].set()
 
         self.clear_and_take_bg_image[cam_id] = threading.Event()
-        self.enable_ongoing_bg_image[cam_id] = threading.Event()
 
         self.tracking_enabled[cam_id] = threading.Event()
         if tracking_enabled_widget.IsChecked():
@@ -349,12 +252,6 @@ class Tracker(object):
 
         self.new_clear_threshold[cam_id] = threading.Event()
         self.new_diff_threshold[cam_id] = threading.Event()
-
-        self.history_buflen_value[cam_id] = 100
-        ctrl = xrc.XRCCTRL(per_cam_panel,"HISTORY_BUFFER_LENGTH")
-        validator = self.xrcid2validator[cam_id]["HISTORY_BUFFER_LENGTH"]
-        ctrl.SetValue( '%d'%self.history_buflen_value[cam_id])
-        validator.set_state('valid')
 
         self.clear_threshold_value[cam_id] = ra.clear_threshold
         self.clear_threshold_value[cam_id] = ra.diff_threshold
@@ -391,18 +288,6 @@ class Tracker(object):
     def get_plugin_name(self):
         return 'UFMF FlyTrax'
 
-    def OnSaveNthFrame(self,event=None,force_cam_id=None):
-        if event is None:
-            assert force_cam_id is not None
-            cam_id = force_cam_id
-        else:
-            widget = event.GetEventObject()
-            cam_id = self.widget2cam_id[widget]
-        per_cam_panel = self.per_cam_panel[cam_id]
-        ctrl = xrc.XRCCTRL(per_cam_panel,"SAVE_NTH_FRAME")
-        intval = int(ctrl.GetValue())
-        self.save_nth_frame[cam_id] = intval
-
     def OnTakeBgImage(self,event):
         widget = event.GetEventObject()
         cam_id = self.widget2cam_id[widget]
@@ -423,27 +308,6 @@ class Tracker(object):
         self.clear_and_take_bg_image[cam_id].set()
         self.display_message('capturing background image')
 
-    def OnEnableOngoingBg(self,event):
-        widget = event.GetEventObject()
-        cam_id = self.widget2cam_id[widget]
-
-        if widget.GetValue():
-            per_cam_panel = self.per_cam_panel[cam_id]
-            ctrl = xrc.XRCCTRL(per_cam_panel,"TAKE_BG_IMAGE_ALLOW_WHEN_SAVING")
-            if not ctrl.GetValue() and cam_id in self.ufmf_writer:
-                dlg = wx.MessageDialog(self.wx_parent,
-                                       'Saving data - cannot take background image',
-                                       'UFMF FlyTrax error',
-                                       wx.OK | wx.ICON_ERROR
-                                       )
-                dlg.ShowModal()
-                dlg.Destroy()
-                return
-            self.enable_ongoing_bg_image[cam_id].set()
-        else:
-            self.enable_ongoing_bg_image[cam_id].clear()
-        self.display_message('enabled ongoing background image updates')
-
     def OnSetNumBackgroundImages(self,event):
         widget = event.GetEventObject()
         cam_id = self.widget2cam_id[widget]
@@ -463,14 +327,6 @@ class Tracker(object):
             self.tracking_enabled[cam_id].set()
         else:
             self.tracking_enabled[cam_id].clear()
-
-    def OnUseROI2(self,event):
-        widget = event.GetEventObject()
-        cam_id = self.widget2cam_id[widget]
-        if widget.IsChecked():
-            self.use_roi2[cam_id].set()
-        else:
-            self.use_roi2[cam_id].clear()
 
     def OnClearThreshold(self,event):
         widget = event.GetEventObject()
@@ -502,18 +358,6 @@ class Tracker(object):
             self.display_message('set difference threshold %d'%newval)
         event.Skip()
 
-    def OnHistoryBuflen(self,event):
-        widget = event.GetEventObject()
-        cam_id = self.widget2cam_id[widget]
-        newvalstr = widget.GetValue()
-        try:
-            newval = int(newvalstr)
-        except ValueError:
-            pass
-        else:
-            self.history_buflen_value[cam_id] = newval
-        event.Skip()
-
     def process_frame(self,cam_id,buf,buf_offset,timestamp,framenumber):
         if self.pixel_format[cam_id]=='YUV422':
             buf = imops.yuv422_to_mono8( numpy.asarray(buf) ) # convert
@@ -534,7 +378,6 @@ class Tracker(object):
         running_mean_im = bunch.running_mean_im_full.roi(l, b, fibuf.size)  # set ROI view
         running_sumsqf = bunch.running_sumsqf_full.roi(l, b, fibuf.size)  # set ROI view
 
-        enable_ongoing_bg_image = self.enable_ongoing_bg_image[cam_id]
         new_clear_threshold = self.new_clear_threshold[cam_id]
         new_diff_threshold = self.new_diff_threshold[cam_id]
         realtime_analyzer = self.realtime_analyzer[cam_id]
@@ -542,8 +385,7 @@ class Tracker(object):
         max_frame_size = self.max_frame_size[cam_id]
         display_active = self.display_active[cam_id]
 
-        history_buflen_value = self.history_buflen_value[cam_id]
-        use_roi2 = self.use_roi2[cam_id].isSet()
+        use_roi2 = True
 
         use_cmp = False # use variance-based background subtraction/analysis
         draw_points = []
@@ -582,7 +424,7 @@ class Tracker(object):
                 bunch.last_running_mean_im = None
             clear_and_take_bg_image.clear()
 
-        if enable_ongoing_bg_image.isSet():
+        if 1:
             self.ticks_since_last_update[cam_id] += 1
 
             update_interval = self.ongoing_bg_image_update_interval[cam_id].get()
@@ -662,26 +504,12 @@ class Tracker(object):
                                                timestamp, framenumber, use_roi2,
                                                use_cmp=use_cmp)
 
-            self.roi_sz_lock.acquire()
-            try:
-                roi_display_sz = self.roi_display_sz
-                roi_save_fmf_sz = self.roi_save_fmf_sz
-            finally:
-                self.roi_sz_lock.release()
-
             if ufmf_writer is not None:
                 pts = []
                 for pt in points:
                     pts.append( (pt[0], pt[1], 20, 20) ) # 20=roi width, height
                 ufmf_writer.add_frame( fibuf, timestamp, pts )
 
-        if n_pts:
-            self.last_detection_list.append((x,y))
-        else:
-            self.last_detection_list.append(None)
-        if len(self.last_detection_list) > history_buflen_value:
-            self.last_detection_list = self.last_detection_list[-history_buflen_value:]
-        draw_points.extend([p for p in self.last_detection_list if p is not None])
         return draw_points, draw_linesegs
 
     def display_message(self,msg,duration_msec=2000):
@@ -700,13 +528,6 @@ class Tracker(object):
             return
 
         per_cam_panel = self.per_cam_panel[cam_id]
-        ctrl = xrc.XRCCTRL(per_cam_panel,"SAVE_NTH_FRAME")
-        ctrl.Enable(False)
-
-        ctrl = xrc.XRCCTRL(self.options_dlg,'ROI_SAVE_FMF_WIDTH')
-        ctrl.Enable(False)
-        ctrl = xrc.XRCCTRL(self.options_dlg,'ROI_SAVE_FMF_HEIGHT')
-        ctrl.Enable(False)
 
         bunch = self.bunches[cam_id]
 
@@ -747,16 +568,8 @@ class Tracker(object):
             self.save_status_widget[cam_id].SetLabel('not saving')
 
             per_cam_panel = self.per_cam_panel[cam_id]
-            ctrl = xrc.XRCCTRL(per_cam_panel,"SAVE_NTH_FRAME")
-            ctrl.Enable(True)
         else:
             self.display_message("not saving data: not stopping")
-
-        if not len(self.ufmf_writer):
-            ctrl = xrc.XRCCTRL(self.options_dlg,'ROI_SAVE_FMF_WIDTH')
-            ctrl.Enable(True)
-            ctrl = xrc.XRCCTRL(self.options_dlg,'ROI_SAVE_FMF_HEIGHT')
-            ctrl.Enable(True)
 
     def quit(self):
         for ufmf_writer in self.ufmf_writer.itervalues():
