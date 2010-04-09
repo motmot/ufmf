@@ -598,7 +598,7 @@ class Tracker(object):
                                                timestamp, framenumber, use_roi2,
                                                use_cmp=use_cmp)
             pts = []
-            w = h = realtime_analyzer.roi2_radius
+            w = h = realtime_analyzer.roi2_radius*2
             for pt in points:
                 pts.append( (pt[0], pt[1], w, h ) )
             ufmf_writer.add_frame( fibuf, timestamp, pts )
