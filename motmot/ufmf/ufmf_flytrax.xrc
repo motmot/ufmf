@@ -189,21 +189,8 @@
                     <option>1</option>
                     <flag>wxEXPAND</flag>
                   </object>
-                  <object class="sizeritem">
-                    <object class="wxStaticText">
-                      <label>save Nth frame:</label>
-                    </object>
-                    <flag>wxALL</flag>
-                    <border>2</border>
-                  </object>
-                  <object class="sizeritem">
-                    <object class="wxTextCtrl" name="SAVE_NTH_FRAME">
-                      <value>1</value>
-                      <style>wxTE_PROCESS_ENTER</style>
-                    </object>
-                    <option>1</option>
-                    <flag>wxEXPAND</flag>
-                  </object>
+                  
+                  
                   <growablecols>1</growablecols>
                 </object>
                 <flag>wxEXPAND</flag>
@@ -279,14 +266,7 @@
                 <flag>wxLEFT|wxRIGHT|wxEXPAND</flag>
                 <border>10</border>
               </object>
-              <object class="sizeritem">
-                <object class="wxButton" name="EDIT_GLOBAL_OPTIONS">
-                  <label>options...</label>
-                  <style/>
-                </object>
-                <flag>wxTOP|wxLEFT|wxRIGHT|wxALIGN_CENTRE_HORIZONTAL</flag>
-                <border>10</border>
-              </object>
+            
             </object>
             <option>1</option>
             <flag>wxBOTTOM|wxEXPAND</flag>
