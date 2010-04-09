@@ -255,6 +255,12 @@ class Tracker(object):
             per_cam_panel,"SAVE_DATA_PREFIX")
         self.widget2cam_id[self.save_data_prefix_widget[cam_id]]=cam_id
 
+        ctrl = xrc.XRCCTRL(per_cam_panel,"SAVE_DATA_DIR_BUTTON")
+        self.widget2cam_id[ctrl]=cam_id
+        wx.EVT_BUTTON(ctrl,
+                      ctrl.GetId(),
+                      self.OnSetSavePath)
+
 #####################
 
         # setup non-GUI stuff
@@ -621,6 +627,25 @@ class Tracker(object):
 
     def OnClearMessage(self,evt):
         self.status_message.SetLabel('')
+
+    def OnSetSavePath(self, event):
+        widget = event.GetEventObject()
+        cam_id = self.widget2cam_id[widget]
+
+        prefix = self.save_data_prefix_widget[cam_id].GetValue()
+        defaultPath, prefix_fname = os.path.split(prefix)
+
+        dlg = wx.DirDialog( self.frame, "ufmf record directory",
+                            style = wx.DD_DEFAULT_STYLE | wx.DD_NEW_DIR_BUTTON,
+                            defaultPath = defaultPath,
+                            )
+        try:
+            if dlg.ShowModal() == wx.ID_OK:
+                save_path_dir = dlg.GetPath()
+                prefix = os.path.join( save_path_dir, prefix_fname )
+                self.save_data_prefix_widget[cam_id].SetValue(prefix)
+        finally:
+            dlg.Destroy()
 
     def OnStartRecording(self,event):
         widget = event.GetEventObject()

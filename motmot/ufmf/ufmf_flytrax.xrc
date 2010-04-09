@@ -192,6 +192,13 @@
                   
                   
                   <growablecols>1</growablecols>
+                  <object class="sizeritem">
+                    <object class="wxButton" name="SAVE_DATA_DIR_BUTTON">
+                      <label>Set save path...</label>
+                    </object>
+                    <option>1</option>
+                    <flag>wxEXPAND</flag>
+                  </object>
                 </object>
                 <flag>wxEXPAND</flag>
               </object>
