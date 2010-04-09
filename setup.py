@@ -23,7 +23,7 @@ setup(name='motmot.ufmf',
     'gui_scripts': ['fmf2ufmf-gui = motmot.ufmf.fmf2ufmf_gui:main',
                     ],
     'motmot.fview.plugins':
-    'fview_ufmf_saver = motmot.ufmf.fview_plugin:UFMFFviewSaver',
+    'fview_ufmf_saver = motmot.ufmf.ufmf_flytrax:Tracker',
     },
       test_suite = 'nose.collector',
       )
