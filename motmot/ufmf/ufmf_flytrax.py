@@ -286,8 +286,13 @@ class Tracker(object):
 
         bunch.inverse_alpha = SharedValue()
         bunch.inverse_alpha.set( float(xrc.XRCCTRL(per_cam_panel,"INVERSE_ALPHA").GetValue()) )
+        validator = self.xrcid2validator[cam_id]["INVERSE_ALPHA"]
+        validator.set_state('valid')
+
         bunch.n_sigma = SharedValue()
         bunch.n_sigma.set( float(xrc.XRCCTRL(per_cam_panel,"N_SIGMA").GetValue()) )
+        validator = self.xrcid2validator[cam_id]["N_SIGMA"]
+        validator.set_state('valid')
 
         bunch.initial_take_bg_state = None
 
