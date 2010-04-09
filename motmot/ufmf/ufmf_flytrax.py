@@ -67,6 +67,13 @@ class LockedValue:
             pass
         return self._val
 
+def corners2linesegs( xmin, ymin, xmax, ymax ):
+    return [ [xmin,ymin,xmin,ymax],
+             [xmin,ymax,xmax,ymax],
+             [xmax,ymax,xmax,ymin],
+             [xmax,ymin,xmin,ymin],
+             ]
+
 class Tracker(object):
     def __init__(self,wx_parent):
         self.wx_parent = wx_parent
@@ -601,7 +608,10 @@ class Tracker(object):
             w = h = realtime_analyzer.roi2_radius*2
             for pt in points:
                 pts.append( (pt[0], pt[1], w, h ) )
-            ufmf_writer.add_frame( fibuf, timestamp, pts )
+            saved_points = ufmf_writer.add_frame( fibuf, timestamp, pts )
+            lineseg_lists = [ corners2linesegs( *corners ) for corners in saved_points]
+            for linesegs in lineseg_lists:
+                draw_linesegs.extend( linesegs )
 
         return draw_points, draw_linesegs
 
