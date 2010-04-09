@@ -15,6 +15,8 @@ import numpy
 
 import motmot.wxvalidatedtext.wxvalidatedtext as wxvt
 
+import warnings
+
 import wx
 from wx import xrc
 import scipy.io
@@ -139,6 +141,9 @@ class Tracker(object):
 
         bunch = BunchClass()
 
+        bunch.max_num_points = SharedValue()
+        bunch.max_num_points.set(10)
+
         self.bunches[cam_id]=bunch
         self.pixel_format[cam_id]=pixel_format
         # setup GUI stuff
@@ -213,6 +218,17 @@ class Tracker(object):
             ignore_initial_value=True)
         self.xrcid2validator[cam_id]["N_SIGMA"] = validator
 
+        ctrl = xrc.XRCCTRL(per_cam_panel,"MAX_NUM_POINTS")
+        self.widget2cam_id[ctrl]=cam_id
+        validator = wxvt.setup_validated_integer_callback(
+            ctrl,
+            ctrl.GetId(),
+            self.OnMaxNPoints,
+            ignore_initial_value=True)
+        self.xrcid2validator[cam_id]["MAX_NUM_POINTS"] = validator
+        ctrl.SetValue(str(bunch.max_num_points.get_nowait()))
+        validator.set_state('valid')
+
         start_recording_widget = xrc.XRCCTRL(per_cam_panel,"START_RECORDING")
         self.widget2cam_id[start_recording_widget]=cam_id
         wx.EVT_BUTTON(start_recording_widget,
@@ -235,7 +251,6 @@ class Tracker(object):
 #####################
 
         # setup non-GUI stuff
-        max_num_points = 10
         self.cam_ids.append(cam_id)
 
         self.display_active[cam_id] = threading.Event()
@@ -254,7 +269,7 @@ class Tracker(object):
         ra = realtime_image_analysis.RealtimeAnalyzer(lbrt,
                                                       max_width,
                                                       max_height,
-                                                      max_num_points,
+                                                      bunch.max_num_points.get_nowait(),
                                                       roi2_radius)
         self.realtime_analyzer[cam_id] = ra
 
@@ -412,6 +427,20 @@ class Tracker(object):
             bunch.n_sigma.set( newval )
         event.Skip()
 
+    def OnMaxNPoints(self,event):
+        widget = event.GetEventObject()
+        cam_id = self.widget2cam_id[widget]
+        bunch = self.bunches[cam_id]
+
+        newvalstr = widget.GetValue()
+        try:
+            newval = int(newvalstr)
+        except ValueError:
+            pass
+        else:
+            bunch.max_num_points.set( newval )
+        event.Skip()
+
     def process_frame(self,cam_id,buf,buf_offset,timestamp,framenumber):
         if self.pixel_format[cam_id]=='YUV422':
             buf = imops.yuv422_to_mono8( numpy.asarray(buf) ) # convert
@@ -421,6 +450,7 @@ class Tracker(object):
 
 
         bunch = self.bunches[cam_id]
+
         do_bg_maint = False
         clear_and_take_bg_image = self.clear_and_take_bg_image[cam_id]
 
@@ -560,6 +590,10 @@ class Tracker(object):
 
         n_pts = 0
         if ufmf_writer is not None:
+            try:
+                realtime_analyzer.max_num_points = bunch.max_num_points.get_nowait()
+            except AttributeError, err:
+                warnings.warn('old realtime_analyzer does not support dynamic setting of max_num_points')
             points = realtime_analyzer.do_work(fibuf,
                                                timestamp, framenumber, use_roi2,
                                                use_cmp=use_cmp)

@@ -21,7 +21,6 @@
             </object>
             <flag>wxALIGN_CENTRE</flag>
           </object>
-          
           <object class="sizeritem">
             <object class="wxStaticLine"/>
             <flag>wxEXPAND</flag>
@@ -45,7 +44,6 @@
             </object>
             <flag>wxALIGN_CENTRE</flag>
           </object>
-          
           <object class="sizeritem">
             <object class="wxBoxSizer">
               <orient>wxHORIZONTAL</orient>
@@ -65,7 +63,6 @@
             </object>
             <flag>wxALIGN_CENTRE</flag>
           </object>
-          
           <object class="sizeritem">
             <object class="wxBoxSizer">
               <object class="sizeritem">
@@ -140,6 +137,23 @@
               </object>
               <object class="sizeritem">
                 <object class="wxTextCtrl" name="BACKGROUND_IMAGE_UPDATE_INTERVAL"/>
+              </object>
+              <orient>wxHORIZONTAL</orient>
+            </object>
+            <option>1</option>
+            <flag>wxALIGN_CENTRE</flag>
+          </object>
+          <object class="sizeritem">
+            <object class="wxBoxSizer">
+              <object class="sizeritem">
+                <object class="wxStaticText">
+                  <label>Max. number of points:</label>
+                </object>
+                <flag>wxALL</flag>
+                <border>2</border>
+              </object>
+              <object class="sizeritem">
+                <object class="wxTextCtrl" name="MAX_NUM_POINTS"/>
               </object>
               <orient>wxHORIZONTAL</orient>
             </object>
@@ -233,7 +247,6 @@
         <flag>wxALL|wxEXPAND|wxALIGN_CENTRE</flag>
         <border>10</border>
       </object>
-    
     </object>
   </object>
   <object class="wxFrame" name="UFMF_FLYTRAX_FRAME">
@@ -332,6 +345,4 @@
       </object>
     </object>
   </object>
-
-  
 </resource>
