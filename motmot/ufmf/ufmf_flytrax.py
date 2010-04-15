@@ -134,6 +134,12 @@ class Tracker(object):
     def get_frame(self):
         return self.frame
 
+    def set_view_flip_LR( self, val ):
+        pass
+
+    def set_view_rotate_180(self,val):
+        pass
+
     def camera_starting_notification(self,
                                      cam_id,
                                      pixel_format=None,
