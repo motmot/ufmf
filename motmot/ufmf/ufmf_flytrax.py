@@ -329,6 +329,8 @@ class Tracker(object):
         validator = self.xrcid2validator[cam_id]["N_SIGMA"]
         validator.set_state('valid')
 
+        self.frame.Fit()
+
         bunch.initial_take_bg_state = None
 
         bunch.running_mean_im_full = FastImage.FastImage32f(max_frame_size)
