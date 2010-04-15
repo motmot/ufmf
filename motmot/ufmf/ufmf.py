@@ -1188,9 +1188,12 @@ class UfmfSaverV3(UfmfSaverBase):
                 assert ymax-ymin == h
                 assert xmax-xmin == w
 
+                saved_points.append( (xmin,ymin, xmax,ymax) )
+
+            for (xmin,ymin,xmax,ymax) in saved_points:
                 roi = origframe[ ymin:ymax, xmin:xmax ]
                 regions.append( (xmin, ymin, roi) )
-                saved_points.append( (xmin,ymin, xmax,ymax) )
+
         self._add_frame_regions(timestamp,regions)
         self.last_timestamp = timestamp
         return saved_points
