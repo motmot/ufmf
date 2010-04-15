@@ -284,7 +284,7 @@ class Tracker(object):
 
         self.ticks_since_last_update[cam_id] = 0
         lbrt = (0,0,max_width-1,max_height-1)
-        
+
         roi2_radius=int(xrc.XRCCTRL(per_cam_panel,"ROI2_RADIUS").GetValue())
         ra = realtime_image_analysis.RealtimeAnalyzer(lbrt,
                                                       max_width,
@@ -502,7 +502,7 @@ class Tracker(object):
         running_mean8u_im_full = realtime_analyzer.get_image_view('mean')
         running_mean8u_im = running_mean8u_im_full.roi(l, b, fibuf.size)
 
-        if (bunch.initial_take_bg_state is not None or 
+        if (bunch.initial_take_bg_state is not None or
             clear_and_take_bg_image.isSet()):
             src_fullframe_fi = fibuf.get_8u_copy(max_frame_size)
 
