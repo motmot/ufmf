@@ -582,20 +582,9 @@ class Tracker(object):
             bg_frame_number = 0
 
             with self.bg_update_lock:
-                bunch.last_running_mean_im = running_mean_im
-                bunch.last_running_sumsqf_image = running_sumsqf
+                bunch.last_running_mean_im = running_mean_im # XXX should copy?
+                bunch.last_running_sumsqf_image = running_sumsqf # XXX should copy?
                 bunch.last_bgcmp_image_timestamp = timestamp
-
-            with self.ufmf_writer_lock:
-                ufmf_writer = self.ufmf_writer.get(cam_id,None)
-
-                if ufmf_writer is not None:
-                    ufmf_writer.add_keyframe('mean',
-                                             running_mean_im,
-                                             timestamp)
-                    ufmf_writer.add_keyframe('sumsq',
-                                             running_sumsqf,
-                                             timestamp)
 
         if new_clear_threshold.isSet():
             nv = self.clear_threshold_value[cam_id]
@@ -635,6 +624,19 @@ class Tracker(object):
                 lineseg_lists = [ corners2linesegs( *corners ) for corners in saved_points]
                 for linesegs in lineseg_lists:
                     draw_linesegs.extend( linesegs )
+
+                # save any pending background model updates
+                with self.bg_update_lock:
+                    if bunch.last_running_mean_im is not None:
+
+                        ufmf_writer.add_keyframe('mean',
+                                                 bunch.last_running_mean_im,
+                                                 bunch.last_bgcmp_image_timestamp)
+                        ufmf_writer.add_keyframe('sumsq',
+                                                 bunch.last_running_sumsqf_image,
+                                                 bunch.last_bgcmp_image_timestamp)
+                        # delete it
+                        bunch.last_running_mean_im = None
 
         return draw_points, draw_linesegs
 
@@ -683,6 +685,8 @@ class Tracker(object):
                 last_bgcmp_image_timestamp = bunch.last_bgcmp_image_timestamp
                 last_running_sumsqf_image = bunch.last_running_sumsqf_image
 
+            bunch.last_running_mean_im = None # clear
+
         prefix = self.save_data_prefix_widget[cam_id].GetValue()
         fname = prefix+time.strftime('%Y%m%d_%H%M%S.ufmf')
         ufmf_writer = ufmf.AutoShrinkUfmfSaverV3( fname,
@@ -692,6 +696,7 @@ class Tracker(object):
                                                   )
         bunch = self.bunches[cam_id]
 
+        # save initial background model
         if last_running_mean_im is not None:
             ufmf_writer.add_keyframe('mean',
                                      last_running_mean_im,
