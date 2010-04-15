@@ -1086,15 +1086,15 @@ class UfmfSaverV3(UfmfSaverBase):
         self.file.write(coding)
         if xinc_yinc is None:
             if coding=='MONO8':
-                xinc_yinc = (1,1)
+                xinc_yinc = (2,2)
             elif coding.startswith('MONO8:'):
                 # Bayer pattern
                 xinc_yinc = (2,2)
             elif coding=='YUV422':
                 xinc_yinc = (4,1)
             else:
-                warnings.warn('ufmf xinc_yinc set (1,1) because coding unknown')
-                xinc_yinc = (1,1)
+                warnings.warn('ufmf xinc_yinc set (2,2) because coding unknown')
+                xinc_yinc = (2,2)
         self.xinc, self.yinc = xinc_yinc
         self._index = {'keyframe':collections.defaultdict(dict),
                        'frame':{}}
