@@ -90,6 +90,7 @@ class Tracker(object):
         self.pixel_format = {}
         self.bunches = {}
 
+        self.ufmf_writer_lock = threading.Lock()
         self.ufmf_writer = {}
 
         self.clear_and_take_bg_image = {}
@@ -133,6 +134,12 @@ class Tracker(object):
 
     def get_frame(self):
         return self.frame
+
+    def set_view_flip_LR( self, val ):
+        pass
+
+    def set_view_rotate_180(self,val):
+        pass
 
     def camera_starting_notification(self,
                                      cam_id,
@@ -347,16 +354,18 @@ class Tracker(object):
 
         per_cam_panel = self.per_cam_panel[cam_id]
         ctrl = xrc.XRCCTRL(per_cam_panel,"TAKE_BG_IMAGE_ALLOW_WHEN_SAVING")
-        if not ctrl.GetValue() and cam_id in self.ufmf_writer:
+        with self.ufmf_writer_lock:
 
-            dlg = wx.MessageDialog(self.wx_parent,
-                                   'Saving data - cannot take background image',
-                                   'UFMF FlyTrax error',
-                                   wx.OK | wx.ICON_ERROR
-                                   )
-            dlg.ShowModal()
-            dlg.Destroy()
-            return
+            if not ctrl.GetValue() and cam_id in self.ufmf_writer:
+
+                dlg = wx.MessageDialog(self.wx_parent,
+                                       'Saving data - cannot take background image',
+                                       'UFMF FlyTrax error',
+                                       wx.OK | wx.ICON_ERROR
+                                       )
+                dlg.ShowModal()
+                dlg.Destroy()
+                return
 
         self.clear_and_take_bg_image[cam_id].set()
         self.display_message('capturing background image')
@@ -529,8 +538,6 @@ class Tracker(object):
             if self.ticks_since_last_update[cam_id]%update_interval == 0:
                 do_bg_maint = True
 
-        ufmf_writer = self.ufmf_writer.get(cam_id,None)
-
         if do_bg_maint:
             hw_roi_frame = fibuf
             cur_fisize = hw_roi_frame.size
@@ -576,13 +583,16 @@ class Tracker(object):
                 bunch.last_running_sumsqf_image = running_sumsqf
                 bunch.last_bgcmp_image_timestamp = timestamp
 
-            if ufmf_writer is not None:
-                ufmf_writer.add_keyframe('mean',
-                                         running_mean_im,
-                                         timestamp)
-                ufmf_writer.add_keyframe('sumsq',
-                                         running_sumsqf,
-                                         timestamp)
+            with self.ufmf_writer_lock:
+                ufmf_writer = self.ufmf_writer.get(cam_id,None)
+
+                if ufmf_writer is not None:
+                    ufmf_writer.add_keyframe('mean',
+                                             running_mean_im,
+                                             timestamp)
+                    ufmf_writer.add_keyframe('sumsq',
+                                             running_sumsqf,
+                                             timestamp)
 
         if new_clear_threshold.isSet():
             nv = self.clear_threshold_value[cam_id]
@@ -602,22 +612,26 @@ class Tracker(object):
             new_roi2_radius.clear()
 
         n_pts = 0
-        if ufmf_writer is not None:
-            try:
-                realtime_analyzer.max_num_points = bunch.max_num_points.get_nowait()
-            except AttributeError, err:
-                warnings.warn('old realtime_analyzer does not support dynamic setting of max_num_points')
-            points = realtime_analyzer.do_work(fibuf,
-                                               timestamp, framenumber, use_roi2,
-                                               use_cmp=use_cmp)
-            pts = []
-            w = h = realtime_analyzer.roi2_radius*2
-            for pt in points:
-                pts.append( (pt[0], pt[1], w, h ) )
-            saved_points = ufmf_writer.add_frame( fibuf, timestamp, pts )
-            lineseg_lists = [ corners2linesegs( *corners ) for corners in saved_points]
-            for linesegs in lineseg_lists:
-                draw_linesegs.extend( linesegs )
+        with self.ufmf_writer_lock:
+            ufmf_writer = self.ufmf_writer.get(cam_id,None)
+
+            if ufmf_writer is not None:
+                try:
+                    realtime_analyzer.max_num_points = bunch.max_num_points.get_nowait()
+                except AttributeError, err:
+                    warnings.warn('old realtime_analyzer does not support dynamic '
+                                  'setting of max_num_points')
+                points = realtime_analyzer.do_work(fibuf,
+                                                   timestamp, framenumber, use_roi2,
+                                                   use_cmp=use_cmp)
+                pts = []
+                w = h = realtime_analyzer.roi2_radius*2
+                for pt in points:
+                    pts.append( (pt[0], pt[1], w, h ) )
+                saved_points = ufmf_writer.add_frame( fibuf, timestamp, pts )
+                lineseg_lists = [ corners2linesegs( *corners ) for corners in saved_points]
+                for linesegs in lineseg_lists:
+                    draw_linesegs.extend( linesegs )
 
         return draw_points, draw_linesegs
 
@@ -682,7 +696,8 @@ class Tracker(object):
             ufmf_writer.add_keyframe('sumsq',
                                      last_running_sumsqf_image,
                                      last_bgcmp_image_timestamp)
-        self.ufmf_writer[cam_id] = ufmf_writer
+        with self.ufmf_writer_lock:
+            self.ufmf_writer[cam_id] = ufmf_writer
         self.save_status_widget[cam_id].SetLabel('saving')
         self.display_message('saving data to %s'%fname)
 
@@ -690,15 +705,17 @@ class Tracker(object):
         widget = event.GetEventObject()
         cam_id = self.widget2cam_id[widget]
 
-        if cam_id in self.ufmf_writer:
-            self.ufmf_writer[cam_id].close()
-            del self.ufmf_writer[cam_id]
-            self.save_status_widget[cam_id].SetLabel('not saving')
+        with self.ufmf_writer_lock:
+            if cam_id in self.ufmf_writer:
+                self.ufmf_writer[cam_id].close()
+                del self.ufmf_writer[cam_id]
+                self.save_status_widget[cam_id].SetLabel('not saving')
 
-            per_cam_panel = self.per_cam_panel[cam_id]
-        else:
-            self.display_message("not saving data: not stopping")
+                per_cam_panel = self.per_cam_panel[cam_id]
+            else:
+                self.display_message("not saving data: not stopping")
 
     def quit(self):
-        for ufmf_writer in self.ufmf_writer.itervalues():
-            ufmf_writer.close() # make sure all data savers close nicely
+        with self.ufmf_writer_lock:
+            for ufmf_writer in self.ufmf_writer.itervalues():
+                ufmf_writer.close() # make sure all data savers close nicely

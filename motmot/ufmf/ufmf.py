@@ -1094,6 +1094,7 @@ class UfmfSaverV3(UfmfSaverBase):
                 xinc_yinc = (4,1)
             else:
                 warnings.warn('ufmf xinc_yinc set (1,1) because coding unknown')
+                xinc_yinc = (1,1)
         self.xinc, self.yinc = xinc_yinc
         self._index = {'keyframe':collections.defaultdict(dict),
                        'frame':{}}
