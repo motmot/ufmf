@@ -180,7 +180,6 @@ def check_b(seek_ok, version, close_it):
                         if tj1 > frame2.shape[1]:
                             tj1 = frame2.shape[1]
                             tj0 = tj1-2*radius
-                    print 'version',version
                     testbuf = frame2[ti0:ti1,tj0:tj1]
                     assert xmin==tj0
                     assert ymin==ti0
