@@ -196,6 +196,24 @@ def _read_dict(fd,buf_remaining=None):
         result[key] = value
     return result,buf_remaining
 
+def minimize_rectangle_coverage( overlap_rects, rectangle_penalty=0 ):
+    """reduce overlap in set of rectangles covering the union of input rects
+
+    rectangle_penalty - a penalty for each additional rectangle, used
+      to discourage small rectangles
+
+    See, for example:
+
+    Heinrich-Litan and Luebbecke (2006), Rectangle
+    covers revisited computationally, J. Exp. Algorithmics
+
+    Ferrari, Sankar, Sklansky (1984) Minimal Rectangular Partitions of
+    Digitized Blobs. Computer Vision, Graphics, and Image Processing.
+
+    """
+    warnings.warn('not implemented: minimize_rectangle_coverage')
+    return overlap_rects
+
 def Ufmf(filename,**kwargs):
     """factory function to return UfmfBase class instance"""
     version = identify_ufmf_version(filename)
@@ -1101,6 +1119,8 @@ class UfmfSaverV3(UfmfSaverBase):
         if frame0 is not None or timestamp0 is not None:
             self.add_keyframe('frame0',frame0,timestamp0)
 
+        self.min_bytes = struct.calcsize(FMT[self.version].POINTS2)
+
     def add_keyframe(self,keyframe_type,image_data,timestamp):
         char2 = len(keyframe_type)
         np_image_data = numpy.asarray(image_data)
@@ -1157,7 +1177,7 @@ class UfmfSaverV3(UfmfSaverBase):
     def add_frame(self,origframe,timestamp,point_data):
         origframe = np.asarray(origframe)
         origframe_h, origframe_w = origframe.shape
-        saved_points = []
+        rects = []
         regions = []
         if len(point_data):
             for this_point_data in point_data:
@@ -1188,12 +1208,18 @@ class UfmfSaverV3(UfmfSaverBase):
                 assert ymax-ymin == h
                 assert xmax-xmin == w
 
+                rects.append( (xmin,ymin, xmax,ymax) )
+
+            ## rects = minimize_rectangle_coverage(
+            ##     rects, rectangle_penalty=self.min_bytes )
+
+            for (xmin,ymin,xmax,ymax) in rects:
                 roi = origframe[ ymin:ymax, xmin:xmax ]
                 regions.append( (xmin, ymin, roi) )
-                saved_points.append( (xmin,ymin, xmax,ymax) )
+
         self._add_frame_regions(timestamp,regions)
         self.last_timestamp = timestamp
-        return saved_points
+        return rects
 
     def close(self):
         b = chr(INDEX_DICT_CHUNK)

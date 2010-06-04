@@ -284,7 +284,7 @@ class Tracker(object):
 
         self.ticks_since_last_update[cam_id] = 0
         lbrt = (0,0,max_width-1,max_height-1)
-        
+
         roi2_radius=int(xrc.XRCCTRL(per_cam_panel,"ROI2_RADIUS").GetValue())
         ra = realtime_image_analysis.RealtimeAnalyzer(lbrt,
                                                       max_width,
@@ -328,6 +328,8 @@ class Tracker(object):
         bunch.n_sigma.set( float(xrc.XRCCTRL(per_cam_panel,"N_SIGMA").GetValue()) )
         validator = self.xrcid2validator[cam_id]["N_SIGMA"]
         validator.set_state('valid')
+
+        self.frame.Fit()
 
         bunch.initial_take_bg_state = None
 
@@ -466,7 +468,8 @@ class Tracker(object):
     def process_frame(self,cam_id,buf,buf_offset,timestamp,framenumber):
         if self.pixel_format[cam_id]=='YUV422':
             buf = imops.yuv422_to_mono8( numpy.asarray(buf) ) # convert
-        elif not self.pixel_format[cam_id].startswith('MONO8'):
+        elif not (self.pixel_format[cam_id].startswith('MONO8') or
+                  self.pixel_format[cam_id].startswith('RAW8')):
             warnings.warn("flytrax plugin incompatible with data format")
             return [], []
 
@@ -501,7 +504,7 @@ class Tracker(object):
         running_mean8u_im_full = realtime_analyzer.get_image_view('mean')
         running_mean8u_im = running_mean8u_im_full.roi(l, b, fibuf.size)
 
-        if (bunch.initial_take_bg_state is not None or 
+        if (bunch.initial_take_bg_state is not None or
             clear_and_take_bg_image.isSet()):
             src_fullframe_fi = fibuf.get_8u_copy(max_frame_size)
 
@@ -579,20 +582,9 @@ class Tracker(object):
             bg_frame_number = 0
 
             with self.bg_update_lock:
-                bunch.last_running_mean_im = running_mean_im
-                bunch.last_running_sumsqf_image = running_sumsqf
+                bunch.last_running_mean_im = running_mean_im # XXX should copy?
+                bunch.last_running_sumsqf_image = running_sumsqf # XXX should copy?
                 bunch.last_bgcmp_image_timestamp = timestamp
-
-            with self.ufmf_writer_lock:
-                ufmf_writer = self.ufmf_writer.get(cam_id,None)
-
-                if ufmf_writer is not None:
-                    ufmf_writer.add_keyframe('mean',
-                                             running_mean_im,
-                                             timestamp)
-                    ufmf_writer.add_keyframe('sumsq',
-                                             running_sumsqf,
-                                             timestamp)
 
         if new_clear_threshold.isSet():
             nv = self.clear_threshold_value[cam_id]
@@ -632,6 +624,19 @@ class Tracker(object):
                 lineseg_lists = [ corners2linesegs( *corners ) for corners in saved_points]
                 for linesegs in lineseg_lists:
                     draw_linesegs.extend( linesegs )
+
+                # save any pending background model updates
+                with self.bg_update_lock:
+                    if bunch.last_running_mean_im is not None:
+
+                        ufmf_writer.add_keyframe('mean',
+                                                 bunch.last_running_mean_im,
+                                                 bunch.last_bgcmp_image_timestamp)
+                        ufmf_writer.add_keyframe('sumsq',
+                                                 bunch.last_running_sumsqf_image,
+                                                 bunch.last_bgcmp_image_timestamp)
+                        # delete it
+                        bunch.last_running_mean_im = None
 
         return draw_points, draw_linesegs
 
@@ -680,6 +685,8 @@ class Tracker(object):
                 last_bgcmp_image_timestamp = bunch.last_bgcmp_image_timestamp
                 last_running_sumsqf_image = bunch.last_running_sumsqf_image
 
+            bunch.last_running_mean_im = None # clear
+
         prefix = self.save_data_prefix_widget[cam_id].GetValue()
         fname = prefix+time.strftime('%Y%m%d_%H%M%S.ufmf')
         ufmf_writer = ufmf.AutoShrinkUfmfSaverV3( fname,
@@ -689,6 +696,7 @@ class Tracker(object):
                                                   )
         bunch = self.bunches[cam_id]
 
+        # save initial background model
         if last_running_mean_im is not None:
             ufmf_writer.add_keyframe('mean',
                                      last_running_mean_im,
