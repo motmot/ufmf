@@ -33,13 +33,13 @@ def main():
         kws = {}
     app = playfmf.MyApp(**kws)
 
-    kwargs = {}
+    kwargs = dict(white_background=options.white_background,
+                  )
     if version==1:
         use_fmf = options.force_no_mean_fmf
         if options.white_background:
             use_fmf = False
         kwargs.update(dict(use_conventional_named_mean_fmf=use_fmf,
-                           white_background=options.white_background,
                            ))
 
     flymovie = ufmf.FlyMovieEmulator(filename,

@@ -403,8 +403,8 @@ class _UFmfV3LowLevelReader(object):
         buf = self._fd.read(n_bytes)
         if len(buf)!=n_bytes:
             if not short_OK:
-                raise ShortUFMFFileError('expected %d bytes, got %d: short file?'%(
-                    n_bytes,len(buf)))
+                raise ShortUFMFFileError('expected %d bytes, got %d: short file %s?'%(
+                    n_bytes,len(buf). self._fd.name))
         return buf
 
 class _UFmfV3Indexer(object):
@@ -752,11 +752,11 @@ class FlyMovieEmulator(object):
         self._darken=darken
         self._allow_no_such_frame_errors = allow_no_such_frame_errors
         self._timestamps = None
-        if (isinstance(self._ufmf,UfmfV1) and
-            self._ufmf.use_conventional_named_mean_fmf):
+        if isinstance(self._ufmf,UfmfV1):
             self.format = 'MONO8' # by definition
             self._fno2loc = None
-            assert white_background==False
+            if self._ufmf.use_conventional_named_mean_fmf:
+                assert white_background==False
         self.white_background = white_background
         self.abs_diff = abs_diff
         if self.abs_diff:
@@ -851,7 +851,11 @@ class FlyMovieEmulator(object):
                 if _return_more:
                     sumsqf_image,sq_timestamp=self._ufmf.get_keyframe_for_timestamp('sumsq',timestamp)
                     more['sumsqf'] = sumsqf_image
-                self._last_frame = np.array(mean_image,copy=True).astype(np.uint8)
+                if not self.white_background:
+                    self._last_frame = np.array(mean_image,copy=True).astype(np.uint8)
+                else:
+                    self._last_frame = np.empty(mean_image.shape,dtype=np.uint8)
+                    self._last_frame.fill(255)
                 more['mean'] = mean_image
             have_frame = True
             more['regions'] = regions
