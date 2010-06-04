@@ -113,7 +113,8 @@ def check_b(seek_ok, version, close_it):
             for i in range(h):
                 frame2[i,1::2] = i
 
-            ll_pts = [
+            # lowerleft corner of region to save
+            all_ll_pts = [
                 [ (345, 144),
                   (521, 118),
                   ],
@@ -126,10 +127,26 @@ def check_b(seek_ok, version, close_it):
                  (369,229),
                  ],
                 ]
-            all_pts = [ [(x+radius,y+radius,subw,subh) for (x,y) in pts ] for pts in ll_pts ]
-            for pts in all_pts:
+
+            # compute center of region to save
+            all_center_pts = [ [(x+radius,y+radius,subw,subh) for (x,y) in pts ] for pts in all_ll_pts ]
+
+            all_saved_points = []
+            for center_pts,ll_pts in zip(all_center_pts,all_ll_pts):
                 timestamp += 1
-                us.add_frame( frame2, timestamp, pts )
+                saved_points = us.add_frame( frame2, timestamp, center_pts )
+                if version != 1:
+
+                    # Version 1 has fixed ROI size, shifts image
+                    # location, so this test makes no sense for V1.
+
+                    for ll_pt, saved_pt in zip(ll_pts,saved_points):
+                        # ensure that desired lowerleft point is near actual
+                        assert abs(ll_pt[0]-saved_pt[0]) < us.xinc
+                        assert abs(ll_pt[1]-saved_pt[1]) < us.yinc
+                else:
+                    saved_points = ll_pts
+                all_saved_points.append( saved_points )
             if close_it:
                 us.close()
 
@@ -142,10 +159,11 @@ def check_b(seek_ok, version, close_it):
             test_timestamp = 2
             for i, (timestamp, regions) in enumerate(us2.readframes()):
                 progress = us2.get_progress()
-                test_ll_pts = ll_pts[i]
+                saved_points = all_saved_points[i]
                 assert timestamp == test_timestamp
                 test_timestamp += 1
-                for test_ll,region in zip(test_ll_pts,regions):
+                #for test_ll,region in zip(test_ll_pts,regions):
+                for test_ll,region in zip(saved_points,regions):
                     xmin,ymin, bufim = region
 
                     # x
@@ -162,7 +180,6 @@ def check_b(seek_ok, version, close_it):
                         if tj1 > frame2.shape[1]:
                             tj1 = frame2.shape[1]
                             tj0 = tj1-2*radius
-
                     testbuf = frame2[ti0:ti1,tj0:tj1]
                     assert xmin==tj0
                     assert ymin==ti0
@@ -196,7 +213,7 @@ def test_late_keyframe_fmf_emulator():
         for i in range(h):
             frame2[i,1::2] = i
 
-        ll_pts = [
+        all_ll_pts = [
             [ (345, 144),
               (521, 118),
               ],
@@ -209,10 +226,10 @@ def test_late_keyframe_fmf_emulator():
              (369,229),
              ],
             ]
-        all_pts = [ [(x+radius,y+radius,subw,subh) for (x,y) in pts ] for pts in ll_pts ]
-        for pts in all_pts:
+        all_center_pts = [ [(x+radius,y+radius,subw,subh) for (x,y) in pts ] for pts in all_ll_pts ]
+        for center_pts in all_center_pts:
             timestamp += 1
-            us.add_frame( frame2, timestamp, pts )
+            us.add_frame( frame2, timestamp, center_pts )
         # add keyframe after frame data
         us.add_keyframe( 'mean', frame1, timestamp+10 )
         us.close()

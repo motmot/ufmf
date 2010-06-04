@@ -17,6 +17,8 @@ def main():
     parser.add_option("--force-no-mean-fmf", action='store_false', default=True,
                       help="disable use of FILE_mean.fmf as background image source")
 
+    parser.add_option("--format", type="string", help="force the movie coding")
+
     (options, args) = parser.parse_args()
 
     if len(args)<1:
@@ -45,7 +47,9 @@ def main():
     flymovie = ufmf.FlyMovieEmulator(filename,
                                      darken=options.darken,
                                      **kwargs)
-    app.OnNewMovie(flymovie)
+    app.OnNewMovie(flymovie,
+                   force_format=options.format,
+                   )
     app.MainLoop()
 
 if __name__ == '__main__':
