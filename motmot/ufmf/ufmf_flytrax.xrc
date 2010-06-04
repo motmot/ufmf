@@ -21,7 +21,6 @@
             </object>
             <flag>wxALIGN_CENTRE</flag>
           </object>
-          
           <object class="sizeritem">
             <object class="wxStaticLine"/>
             <flag>wxEXPAND</flag>
@@ -45,7 +44,6 @@
             </object>
             <flag>wxALIGN_CENTRE</flag>
           </object>
-          
           <object class="sizeritem">
             <object class="wxBoxSizer">
               <orient>wxHORIZONTAL</orient>
@@ -65,7 +63,6 @@
             </object>
             <flag>wxALIGN_CENTRE</flag>
           </object>
-          
           <object class="sizeritem">
             <object class="wxBoxSizer">
               <object class="sizeritem">
@@ -146,6 +143,23 @@
             <option>1</option>
             <flag>wxALIGN_CENTRE</flag>
           </object>
+          <object class="sizeritem">
+            <object class="wxBoxSizer">
+              <object class="sizeritem">
+                <object class="wxStaticText">
+                  <label>Max. number of points:</label>
+                </object>
+                <flag>wxALL</flag>
+                <border>2</border>
+              </object>
+              <object class="sizeritem">
+                <object class="wxTextCtrl" name="MAX_NUM_POINTS"/>
+              </object>
+              <orient>wxHORIZONTAL</orient>
+            </object>
+            <option>1</option>
+            <flag>wxALIGN_CENTRE</flag>
+          </object>
         </object>
         <flag>wxALL|wxEXPAND|wxALIGN_CENTRE</flag>
         <border>10</border>
@@ -175,22 +189,16 @@
                     <option>1</option>
                     <flag>wxEXPAND</flag>
                   </object>
+                  
+                  
+                  <growablecols>1</growablecols>
                   <object class="sizeritem">
-                    <object class="wxStaticText">
-                      <label>save Nth frame:</label>
-                    </object>
-                    <flag>wxALL</flag>
-                    <border>2</border>
-                  </object>
-                  <object class="sizeritem">
-                    <object class="wxTextCtrl" name="SAVE_NTH_FRAME">
-                      <value>1</value>
-                      <style>wxTE_PROCESS_ENTER</style>
+                    <object class="wxButton" name="SAVE_DATA_DIR_BUTTON">
+                      <label>Set save path...</label>
                     </object>
                     <option>1</option>
                     <flag>wxEXPAND</flag>
                   </object>
-                  <growablecols>1</growablecols>
                 </object>
                 <flag>wxEXPAND</flag>
               </object>
@@ -233,7 +241,6 @@
         <flag>wxALL|wxEXPAND|wxALIGN_CENTRE</flag>
         <border>10</border>
       </object>
-    
     </object>
   </object>
   <object class="wxFrame" name="UFMF_FLYTRAX_FRAME">
@@ -266,14 +273,7 @@
                 <flag>wxLEFT|wxRIGHT|wxEXPAND</flag>
                 <border>10</border>
               </object>
-              <object class="sizeritem">
-                <object class="wxButton" name="EDIT_GLOBAL_OPTIONS">
-                  <label>options...</label>
-                  <style/>
-                </object>
-                <flag>wxTOP|wxLEFT|wxRIGHT|wxALIGN_CENTRE_HORIZONTAL</flag>
-                <border>10</border>
-              </object>
+            
             </object>
             <option>1</option>
             <flag>wxBOTTOM|wxEXPAND</flag>
@@ -332,6 +332,4 @@
       </object>
     </object>
   </object>
-
-  
 </resource>

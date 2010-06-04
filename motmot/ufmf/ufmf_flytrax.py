@@ -1,4 +1,5 @@
 from __future__ import division
+from __future__ import with_statement
 
 import sys, threading, Queue, time, socket, math, struct, os
 import pkg_resources
@@ -13,6 +14,8 @@ import motmot.ufmf.ufmf as ufmf
 import numpy
 
 import motmot.wxvalidatedtext.wxvalidatedtext as wxvt
+
+import warnings
 
 import wx
 from wx import xrc
@@ -63,6 +66,13 @@ class LockedValue:
         except Queue.Empty:
             pass
         return self._val
+
+def corners2linesegs( xmin, ymin, xmax, ymax ):
+    return [ [xmin,ymin,xmin,ymax],
+             [xmin,ymax,xmax,ymax],
+             [xmax,ymax,xmax,ymin],
+             [xmax,ymin,xmin,ymin],
+             ]
 
 class Tracker(object):
     def __init__(self,wx_parent):
@@ -138,6 +148,9 @@ class Tracker(object):
 
         bunch = BunchClass()
 
+        bunch.max_num_points = SharedValue()
+        bunch.max_num_points.set(10)
+
         self.bunches[cam_id]=bunch
         self.pixel_format[cam_id]=pixel_format
         # setup GUI stuff
@@ -212,6 +225,17 @@ class Tracker(object):
             ignore_initial_value=True)
         self.xrcid2validator[cam_id]["N_SIGMA"] = validator
 
+        ctrl = xrc.XRCCTRL(per_cam_panel,"MAX_NUM_POINTS")
+        self.widget2cam_id[ctrl]=cam_id
+        validator = wxvt.setup_validated_integer_callback(
+            ctrl,
+            ctrl.GetId(),
+            self.OnMaxNPoints,
+            ignore_initial_value=True)
+        self.xrcid2validator[cam_id]["MAX_NUM_POINTS"] = validator
+        ctrl.SetValue(str(bunch.max_num_points.get_nowait()))
+        validator.set_state('valid')
+
         start_recording_widget = xrc.XRCCTRL(per_cam_panel,"START_RECORDING")
         self.widget2cam_id[start_recording_widget]=cam_id
         wx.EVT_BUTTON(start_recording_widget,
@@ -231,10 +255,15 @@ class Tracker(object):
             per_cam_panel,"SAVE_DATA_PREFIX")
         self.widget2cam_id[self.save_data_prefix_widget[cam_id]]=cam_id
 
+        ctrl = xrc.XRCCTRL(per_cam_panel,"SAVE_DATA_DIR_BUTTON")
+        self.widget2cam_id[ctrl]=cam_id
+        wx.EVT_BUTTON(ctrl,
+                      ctrl.GetId(),
+                      self.OnSetSavePath)
+
 #####################
 
         # setup non-GUI stuff
-        max_num_points = 10
         self.cam_ids.append(cam_id)
 
         self.display_active[cam_id] = threading.Event()
@@ -253,7 +282,7 @@ class Tracker(object):
         ra = realtime_image_analysis.RealtimeAnalyzer(lbrt,
                                                       max_width,
                                                       max_height,
-                                                      max_num_points,
+                                                      bunch.max_num_points.get_nowait(),
                                                       roi2_radius)
         self.realtime_analyzer[cam_id] = ra
 
@@ -285,8 +314,13 @@ class Tracker(object):
 
         bunch.inverse_alpha = SharedValue()
         bunch.inverse_alpha.set( float(xrc.XRCCTRL(per_cam_panel,"INVERSE_ALPHA").GetValue()) )
+        validator = self.xrcid2validator[cam_id]["INVERSE_ALPHA"]
+        validator.set_state('valid')
+
         bunch.n_sigma = SharedValue()
         bunch.n_sigma.set( float(xrc.XRCCTRL(per_cam_panel,"N_SIGMA").GetValue()) )
+        validator = self.xrcid2validator[cam_id]["N_SIGMA"]
+        validator.set_state('valid')
 
         bunch.initial_take_bg_state = None
 
@@ -406,6 +440,20 @@ class Tracker(object):
             bunch.n_sigma.set( newval )
         event.Skip()
 
+    def OnMaxNPoints(self,event):
+        widget = event.GetEventObject()
+        cam_id = self.widget2cam_id[widget]
+        bunch = self.bunches[cam_id]
+
+        newvalstr = widget.GetValue()
+        try:
+            newval = int(newvalstr)
+        except ValueError:
+            pass
+        else:
+            bunch.max_num_points.set( newval )
+        event.Skip()
+
     def process_frame(self,cam_id,buf,buf_offset,timestamp,framenumber):
         if self.pixel_format[cam_id]=='YUV422':
             buf = imops.yuv422_to_mono8( numpy.asarray(buf) ) # convert
@@ -415,6 +463,7 @@ class Tracker(object):
 
 
         bunch = self.bunches[cam_id]
+
         do_bg_maint = False
         clear_and_take_bg_image = self.clear_and_take_bg_image[cam_id]
 
@@ -554,14 +603,21 @@ class Tracker(object):
 
         n_pts = 0
         if ufmf_writer is not None:
+            try:
+                realtime_analyzer.max_num_points = bunch.max_num_points.get_nowait()
+            except AttributeError, err:
+                warnings.warn('old realtime_analyzer does not support dynamic setting of max_num_points')
             points = realtime_analyzer.do_work(fibuf,
                                                timestamp, framenumber, use_roi2,
                                                use_cmp=use_cmp)
             pts = []
-            w = h = realtime_analyzer.roi2_radius
+            w = h = realtime_analyzer.roi2_radius*2
             for pt in points:
                 pts.append( (pt[0], pt[1], w, h ) )
-            ufmf_writer.add_frame( fibuf, timestamp, pts )
+            saved_points = ufmf_writer.add_frame( fibuf, timestamp, pts )
+            lineseg_lists = [ corners2linesegs( *corners ) for corners in saved_points]
+            for linesegs in lineseg_lists:
+                draw_linesegs.extend( linesegs )
 
         return draw_points, draw_linesegs
 
@@ -571,6 +627,25 @@ class Tracker(object):
 
     def OnClearMessage(self,evt):
         self.status_message.SetLabel('')
+
+    def OnSetSavePath(self, event):
+        widget = event.GetEventObject()
+        cam_id = self.widget2cam_id[widget]
+
+        prefix = self.save_data_prefix_widget[cam_id].GetValue()
+        defaultPath, prefix_fname = os.path.split(prefix)
+
+        dlg = wx.DirDialog( self.frame, "ufmf record directory",
+                            style = wx.DD_DEFAULT_STYLE | wx.DD_NEW_DIR_BUTTON,
+                            defaultPath = defaultPath,
+                            )
+        try:
+            if dlg.ShowModal() == wx.ID_OK:
+                save_path_dir = dlg.GetPath()
+                prefix = os.path.join( save_path_dir, prefix_fname )
+                self.save_data_prefix_widget[cam_id].SetValue(prefix)
+        finally:
+            dlg.Destroy()
 
     def OnStartRecording(self,event):
         widget = event.GetEventObject()
