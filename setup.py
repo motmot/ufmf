@@ -20,8 +20,6 @@ setup(name='motmot.ufmf',
                         'ufmf_1to3 = motmot.ufmf.ufmf_1to3:main',
                         'ufmf_2to3 = motmot.ufmf.ufmf_2to3:main',
                         ],
-    'gui_scripts': ['fmf2ufmf-gui = motmot.ufmf.fmf2ufmf_gui:main',
-                    ],
     'motmot.fview.plugins':
     'fview_ufmf_saver = motmot.ufmf.ufmf_flytrax:Tracker',
     },
