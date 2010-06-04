@@ -54,9 +54,13 @@ FMT = {1:BaseDict(HEADER = '<IIdII', # version, ....
                   POINTS1 = '<dH', # timestamp, n_pts
                   POINTS2 = '<HHHH', # x0, y0, w, h
                   ),
-       # Format 4 is the same as format 3, except it allows for width and height of boxes to be fixed and encoded only once
+
+       # Format 4 is the same as format 3, except it allows for width
+       # and height of boxes to be fixed and encoded only once
+
        4:BaseDict(HEADER = '<4sIQHHBB', # 'ufmf', version, index location,
-                                        # max w, max h, isfixedsize, raw coding string length
+                                        # max w, max h, isfixedsize,
+                                        # raw coding string length
                   CHUNKID = '<B', # 0 = keyframe, 1 = points
                   KEYFRAME1 = '<B', # (type name)
                   KEYFRAME2 = '<cHHd', # (dtype, width,height,timestamp)
@@ -419,7 +423,7 @@ class _UFmfV3LowLevelReader(object):
         # added by KB:
         # read in RGB24 data
         # the data is indexed by column, then row, then color
-        # colors are in the order RGB. 
+        # colors are in the order RGB.
         if self._coding == 'rgb24':
             read_len = width*height*sz*self._bytesperpixel
             buf = self._fd_read(read_len)
@@ -453,7 +457,7 @@ class _UFmfV3LowLevelReader(object):
             # added by KB
             # read in RGB24 data
             # the data is indexed by column, then row, then color
-            # colors are in the order RGB. 
+            # colors are in the order RGB.
             if self._coding == 'rgb24':
                 lenbuf = w*h*self._bytesperpixel
                 buf = self._fd_read(lenbuf)
@@ -486,7 +490,7 @@ class _UFmfV4LowLevelReader(_UFmfV3LowLevelReader):
 
     # Set parameters not set in V3
     # We don't do this in __init__ because these require the header
-    # to have been read already. 
+    # to have been read already.
     def SetParams(self,max_width,max_height,isfixedsize):
         # whether the boxes are fixed size
         self._isfixedsize = isfixedsize
@@ -518,7 +522,7 @@ class _UFmfV4LowLevelReader(_UFmfV3LowLevelReader):
 
             # for quicker reading and writing, the data here is stored as
             # all x-locations, followed by all y-locations, followed by
-            # all pixel values. 
+            # all pixel values.
             lenbuf = n_pts*self._points2_sz
             buf = self._fd_read(lenbuf)
             locs = np.fromstring(buf,dtype=np.uint16)
@@ -530,13 +534,13 @@ class _UFmfV4LowLevelReader(_UFmfV3LowLevelReader):
             im = np.fromstring(buf,dtype=np.uint8)
             im.shape = (self._bytesperpixel,self._h,self._w,n_pts)
             im = im.transpose(1,2,0,3)
-            # if we need regions to be backwards compatible, we 
+            # if we need regions to be backwards compatible, we
             # compute in the standard way
             if isbackcompat:
                 for ptno in range(n_pts):
                     regions.append((locs[0,ptno],locs[1,ptno],im[:,:,:,ptno]))
             else:
-                # otherwise, regions is just the pair of locations and 
+                # otherwise, regions is just the pair of locations and
                 # image data
                 regions = (locs,im)
         else:
@@ -546,7 +550,7 @@ class _UFmfV4LowLevelReader(_UFmfV3LowLevelReader):
                 (xmin, ymin, w, h) = intup
                 # read in RGB24 data
                 # the data is indexed by column, then row, then color
-                # colors are in the order RGB. 
+                # colors are in the order RGB.
                 if self._coding == 'rgb24':
                     lenbuf = w*h*self._bytesperpixel
                     buf = self._fd_read(lenbuf)
@@ -676,7 +680,7 @@ class _UFmfV3Indexer(object):
 
 # added by KB
 # UFmfV4Indexer is the same as V3 except we also store the size of POINTS3
-# (I don't think this is actually even necessary). 
+# (I don't think this is actually even necessary).
 class _UFmfV4Indexer(_UFmfV3Indexer):
     """create an index from an un-unindexed .ufmf v4 file"""
     def __init__(self,fd, version,
@@ -889,9 +893,9 @@ class UfmfV3(UfmfBase):
 
 # added by KB:
 # UfmfV4 is the same as V3 except the header contains an extra
-# field. This field is a uint8 and is 1 if all the boxes are 
-# fixed at size max_height, max_width, and 0 if the standard, 
-# variable-size boxes are used. 
+# field. This field is a uint8 and is 1 if all the boxes are
+# fixed at size max_height, max_width, and 0 if the standard,
+# variable-size boxes are used.
 class UfmfV4(UfmfV3):
     def _get_interface_version(self):
         return 4
@@ -996,7 +1000,7 @@ class UfmfV4(UfmfV3):
                 buf = struct.pack( FMT[self._version].HEADER, 'ufmf',
                                    self._version, index_dict_location,
                                    self._max_width, self._max_height,
-                                   self._isfixedsize, 
+                                   self._isfixedsize,
                                    len(self._coding) )
                 self._fd.write(buf)
             except IOError, err:
@@ -1189,7 +1193,7 @@ class FlyMovieEmulator(object):
                     im = im.reshape(h,w,npts)
                 if h == 1 and w == 1:
                     if self._last_frame.ndim == 3:
-                        self._last_frame[locs[1,:],locs[0,:],:] = np.reshape(im,(ncolors,npts)).T 
+                        self._last_frame[locs[1,:],locs[0,:],:] = np.reshape(im,(ncolors,npts)).T
                     else:
                         self._last_frame[locs[1,:],locs[0,:]] = np.reshape(im,(npts,))
                 else:
