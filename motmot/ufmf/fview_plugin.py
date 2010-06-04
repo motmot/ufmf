@@ -5,7 +5,6 @@ import motmot.fview.traited_plugin as traited_plugin
 
 import enthought.traits.api as traits
 from enthought.traits.ui.api import View, Item, Group
-import motmot.realtime_image_analysis.trealtime_image_analysis as tra
 
 class UFMFFviewSaver(traited_plugin.HasTraits_FViewPlugin):
     plugin_name = 'ufmf saver'
@@ -13,8 +12,6 @@ class UFMFFviewSaver(traited_plugin.HasTraits_FViewPlugin):
     draw_points = traits.Bool(True)
     draw_boxes = traits.Bool(True)
     pixel_format = traits.String()
-
-    realtime_analyzer = traits.Instance( tra.TraitedRealtimeAnalyzer )
 
     traits_view = View(Group(Item(name='enabled'),
 
@@ -35,10 +32,7 @@ class UFMFFviewSaver(traited_plugin.HasTraits_FViewPlugin):
                                      pixel_format=None,
                                      max_width=None,
                                      max_height=None):
-        self.realtime_analyzer = tra.TraitedRealtimeAnalyzer(
-            max_width=max_width,
-            max_height=max_height,
-            pixel_format=pixel_format)
+        self.realtime_analyzer = None
 
     def process_frame(self,cam_id,buf,buf_offset,timestamp,framenumber):
         draw_points = []
