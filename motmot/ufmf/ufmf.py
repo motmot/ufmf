@@ -485,8 +485,6 @@ class _UFmfV3LowLevelReader(object):
 # V4 added by KB
 # Main difference from V3: allows fixed-size UFMFs
 class _UFmfV4LowLevelReader(_UFmfV3LowLevelReader):
-    def __init__(self,fd,version):
-        super(_UFmfV4LowLevelReader,self).__init__(fd,version)
 
     # Set parameters not set in V3
     # We don't do this in __init__ because these require the header
