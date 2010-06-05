@@ -381,22 +381,11 @@ class _UFmfV3LowLevelReader(object):
     def __init__(self,fd,version):
         self._fd = fd
         self._version = version
-        self._coding = ''
+        self._coding = 'MONO8'
 
         self._keyframe2_sz = struct.calcsize(FMT[self._version].KEYFRAME2)
         self._points1_sz =   struct.calcsize(FMT[self._version].POINTS1)
         self._points2_sz =   struct.calcsize(FMT[self._version].POINTS2)
-
-    def set_coding(self,coding):
-        self._coding = coding.lower()
-        # added by KB:
-        if self._coding == 'rgb24':
-            self._bytesperpixel = 3
-        elif self._coding == 'mono8':
-            self._bytesperpixel = 1
-        else:
-            self._bytesperpixel = 1
-            raise NotImplementedError('Color coding %s not yet implemented'%self._coding)
 
     def _read_keyframe_chunk(self):
         """read keyframe chunk from just after chunk_id byte
@@ -424,17 +413,18 @@ class _UFmfV3LowLevelReader(object):
         # read in RGB24 data
         # the data is indexed by column, then row, then color
         # colors are in the order RGB.
-        if self._coding == 'rgb24':
+        if (self._coding=='MONO8' or self._coding.startswith('MONO8:') or
+            self._coding=='YUV422'):
+            read_len = width*height*sz
+            buf = self._fd_read(read_len)
+            frame = np.fromstring(buf,dtype=dtype)
+            frame.shape = (height,width)
+        elif self._coding == 'column-RGB8':
             read_len = width*height*sz*self._bytesperpixel
             buf = self._fd_read(read_len)
             frame = np.fromstring(buf,dtype=dtype)
             frame.shape = (3,height,width)
             frame = frame.transpose((1,2,0))
-        elif self._coding == 'mono8':
-            read_len = width*height*sz
-            buf = self._fd_read(read_len)
-            frame = np.fromstring(buf,dtype=dtype)
-            frame.shape = (height,width)
         else:
             raise NotImplementedError('Color coding %s not yet implemented'%self._coding)
         return keyframe_type,frame,timestamp
@@ -458,17 +448,18 @@ class _UFmfV3LowLevelReader(object):
             # read in RGB24 data
             # the data is indexed by column, then row, then color
             # colors are in the order RGB.
-            if self._coding == 'rgb24':
+            if (self._coding=='MONO8' or self._coding.startswith('MONO8:') or
+                self._coding=='YUV422'):
+                lenbuf = w*h
+                buf = self._fd_read(lenbuf)
+                im = np.fromstring(buf,dtype=np.uint8)
+                im.shape = (h,w)
+            elif self._coding == 'column-RGB8':
                 lenbuf = w*h*self._bytesperpixel
                 buf = self._fd_read(lenbuf)
                 im = np.fromstring(buf,dtype=np.uint8)
                 im.shape = (self._bytesperpixel,h,w)
                 im = im.transpose((1,2,0))
-            elif self._coding == 'mono8':
-                lenbuf = w*h
-                buf = self._fd_read(lenbuf)
-                im = np.fromstring(buf,dtype=np.uint8)
-                im.shape = (h,w)
             else:
                 raise NotImplementedError('Color coding %s not yet implemented'%self._coding)
             regions.append( (xmin,ymin,im) )
@@ -549,17 +540,18 @@ class _UFmfV4LowLevelReader(_UFmfV3LowLevelReader):
                 # read in RGB24 data
                 # the data is indexed by column, then row, then color
                 # colors are in the order RGB.
-                if self._coding == 'rgb24':
+                if (self._coding=='MONO8' or self._coding.startswith('MONO8:') or
+                    self._coding=='YUV422'):
+                    lenbuf = w*h
+                    buf = self._fd_read(lenbuf)
+                    im = np.fromstring(buf,dtype=np.uint8)
+                    im.shape = (h,w)
+                elif self._coding == 'column-RGB8':
                     lenbuf = w*h*self._bytesperpixel
                     buf = self._fd_read(lenbuf)
                     im = np.fromstring(buf,dtype=np.uint8)
                     im.shape = (self._bytesperpixel,h,w)
                     im = im.transpose((1,2,0))
-                elif self._coding == 'mono8':
-                    lenbuf = w*h
-                    buf = self._fd_read(lenbuf)
-                    im = np.fromstring(buf,dtype=np.uint8)
-                    im.shape = (h,w)
                 else:
                     raise NotImplementedError('Color coding %s not yet implemented'%self._coding)
                 regions.append( (xmin,ymin,im) )
@@ -751,10 +743,9 @@ class UfmfV3(UfmfBase):
         assert ufmf_str=='ufmf'
         assert expected_version==self._version
         self._coding = self._r._fd_read( coding_str_len )
-        self._coding = self._coding.lower()
 
         # store the coding in the low-level reader
-        self._r.set_coding(self._coding)
+        self._r._coding = self._coding
 
         self._next_frame = 0
         if ignore_preexisting_index:
@@ -954,10 +945,9 @@ class UfmfV4(UfmfV3):
         assert ufmf_str=='ufmf'
         assert expected_version==self._version
         self._coding = self._r._fd_read( coding_str_len )
-        self._coding = self._coding.lower()
 
         # store the coding in the low-level reader
-        self._r.set_coding(self._coding)
+        self._r._coding = self._coding
 
         self._next_frame = 0
         if ignore_preexisting_index:
