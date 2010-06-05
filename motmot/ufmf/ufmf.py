@@ -489,7 +489,7 @@ class _UFmfV4LowLevelReader(_UFmfV3LowLevelReader):
     # Set parameters not set in V3
     # We don't do this in __init__ because these require the header
     # to have been read already.
-    def SetParams(self,max_width,max_height,isfixedsize):
+    def set_params(self,max_width,max_height,isfixedsize):
         # whether the boxes are fixed size
         self._isfixedsize = isfixedsize
         # if fixed size, then we only have the left, top pixel
@@ -949,7 +949,7 @@ class UfmfV4(UfmfV3):
          self._max_width, self._max_height, self._isfixedsize,
          coding_str_len) = intup
         # store the new parameters in V4
-        self._r.SetParams(self._max_width,self._max_height,self._isfixedsize)
+        self._r.set_params(self._max_width,self._max_height,self._isfixedsize)
 
         assert ufmf_str=='ufmf'
         assert expected_version==self._version
