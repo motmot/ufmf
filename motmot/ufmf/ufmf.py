@@ -382,6 +382,7 @@ class _UFmfV3LowLevelReader(object):
         self._fd = fd
         self._version = version
         self._coding = 'MONO8'
+        self._bytesperpixel = 1
 
         self._keyframe2_sz = struct.calcsize(FMT[self._version].KEYFRAME2)
         self._points1_sz =   struct.calcsize(FMT[self._version].POINTS1)
@@ -746,6 +747,8 @@ class UfmfV3(UfmfBase):
 
         # store the coding in the low-level reader
         self._r._coding = self._coding
+        if self._coding == 'column-RGB8':
+            self._r._bytesperpixel = 3
 
         self._next_frame = 0
         if ignore_preexisting_index:
