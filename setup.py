@@ -23,5 +23,7 @@ setup(name='motmot.ufmf',
     'motmot.fview.plugins':
     'fview_ufmf_saver = motmot.ufmf.ufmf_flytrax:Tracker',
     },
+      package_data = {'motmot.ufmf':['*.xrc',
+                                     ]},
       test_suite = 'nose.collector',
       )
