@@ -16,7 +16,7 @@
           </object>
           <object class="sizeritem">
             <object class="wxCheckBox" name="TAKE_BG_IMAGE_ALLOW_WHEN_SAVING">
-              <label>Allow when saving output</label>
+              <label>Allow clear/take when saving output</label>
               <checked>0</checked>
             </object>
             <flag>wxALIGN_CENTRE</flag>
