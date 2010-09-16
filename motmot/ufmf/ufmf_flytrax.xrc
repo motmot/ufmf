@@ -25,6 +25,12 @@
             <object class="wxStaticLine"/>
             <flag>wxEXPAND</flag>
           </object>
+	  <object class="sizeritem">
+            <object class="wxCheckBox" name="ENABLED_CHECKBOX">
+              <label>Enable image analysis when not saving</label>
+            </object>
+            <flag>wxALIGN_CENTRE</flag>
+          </object>
           <object class="sizeritem">
             <object class="wxBoxSizer">
               <orient>wxHORIZONTAL</orient>

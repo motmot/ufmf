@@ -74,6 +74,14 @@ def corners2linesegs( xmin, ymin, xmax, ymax ):
              [xmax,ymin,xmin,ymin],
              ]
 
+class DummyFile():
+    def __init__(self):
+        self.pos = 0
+    def write(self,value):
+        self.pos += len(value)
+    def tell(self):
+        return self.pos
+
 class Tracker(object):
     def __init__(self,wx_parent):
         self.wx_parent = wx_parent
@@ -92,6 +100,12 @@ class Tracker(object):
 
         self.ufmf_writer_lock = threading.Lock()
         self.ufmf_writer = {}
+
+        self.dummy_ufmf_writer_lock = threading.Lock()
+        self.dummy_ufmf_writer = {}
+
+        self.tracking_enabled_lock = threading.Lock()
+        self.tracking_enabled = {}
 
         self.clear_and_take_bg_image = {}
 
@@ -255,6 +269,12 @@ class Tracker(object):
                       stop_recording_widget.GetId(),
                       self.OnStopRecording)
 
+        tracking_enabled_widget = xrc.XRCCTRL(per_cam_panel,"ENABLED_CHECKBOX")
+        self.widget2cam_id[tracking_enabled_widget]=cam_id
+        wx.EVT_CHECKBOX(tracking_enabled_widget,
+                        tracking_enabled_widget.GetId(),
+                        self.OnToggleTrackingEnabled)
+
         save_status_widget = xrc.XRCCTRL(per_cam_panel,"SAVE_STATUS")
         self.save_status_widget[cam_id] = save_status_widget
 
@@ -343,6 +363,15 @@ class Tracker(object):
         bunch.noisy_pixels_mask_full = FastImage.FastImage8u(max_frame_size)
 
         bunch.last_running_mean_im = None
+
+        dummy_file = DummyFile()
+        with self.dummy_ufmf_writer_lock:
+            self.dummy_ufmf_writer[cam_id] = ufmf.AutoShrinkUfmfSaverV3( dummy_file,
+                                                                         coding = self.pixel_format[cam_id],
+                                                                         max_width=self.max_frame_size[cam_id].w,
+                                                                         max_height=self.max_frame_size[cam_id].h,
+                                                                         )
+
 
     def get_buffer_allocator(self,cam_id):
         return BufferAllocator()
@@ -605,38 +634,45 @@ class Tracker(object):
 
         n_pts = 0
         with self.ufmf_writer_lock:
-            ufmf_writer = self.ufmf_writer.get(cam_id,None)
+            with self.tracking_enabled_lock:
+                ufmf_writer = self.ufmf_writer.get(cam_id,None)
+                tracking_enabled = self.tracking_enabled.get(cam_id,False)
 
-            if ufmf_writer is not None:
-                try:
-                    realtime_analyzer.max_num_points = bunch.max_num_points.get_nowait()
-                except AttributeError, err:
-                    warnings.warn('old realtime_analyzer does not support dynamic '
-                                  'setting of max_num_points')
-                points = realtime_analyzer.do_work(fibuf,
-                                                   timestamp, framenumber, use_roi2,
-                                                   use_cmp=use_cmp)
-                pts = []
-                w = h = realtime_analyzer.roi2_radius*2
-                for pt in points:
-                    pts.append( (pt[0], pt[1], w, h ) )
-                saved_points = ufmf_writer.add_frame( fibuf, timestamp, pts )
-                lineseg_lists = [ corners2linesegs( *corners ) for corners in saved_points]
-                for linesegs in lineseg_lists:
-                    draw_linesegs.extend( linesegs )
+                if (ufmf_writer is not None) or tracking_enabled:
+                    try:
+                        realtime_analyzer.max_num_points = bunch.max_num_points.get_nowait()
+                    except AttributeError, err:
+                        warnings.warn('old realtime_analyzer does not support dynamic '
+                                      'setting of max_num_points')
+                    points = realtime_analyzer.do_work(fibuf,
+                                                       timestamp, framenumber, use_roi2,
+                                                       use_cmp=use_cmp)
+                    pts = []
+                    w = h = realtime_analyzer.roi2_radius*2
+                    for pt in points:
+                        pts.append( (pt[0], pt[1], w, h ) )
+                    if ufmf_writer is not None:
+                        saved_points = ufmf_writer.add_frame( fibuf, timestamp, pts )
+                    else:
+                        saved_points = self.dummy_ufmf_writer[cam_id].add_frame( fibuf, timestamp, pts )
 
-                # save any pending background model updates
-                with self.bg_update_lock:
-                    if bunch.last_running_mean_im is not None:
+                    lineseg_lists = [ corners2linesegs( *corners ) for corners in saved_points]
+                    for linesegs in lineseg_lists:
+                        draw_linesegs.extend( linesegs )
 
-                        ufmf_writer.add_keyframe('mean',
-                                                 bunch.last_running_mean_im,
-                                                 bunch.last_bgcmp_image_timestamp)
-                        ufmf_writer.add_keyframe('sumsq',
-                                                 bunch.last_running_sumsqf_image,
-                                                 bunch.last_bgcmp_image_timestamp)
-                        # delete it
-                        bunch.last_running_mean_im = None
+                    # save any pending background model updates
+                    with self.bg_update_lock:
+                        if bunch.last_running_mean_im is not None:
+
+                            if ufmf_writer is not None:
+                                ufmf_writer.add_keyframe('mean',
+                                                         bunch.last_running_mean_im,
+                                                         bunch.last_bgcmp_image_timestamp)
+                                ufmf_writer.add_keyframe('sumsq',
+                                                         bunch.last_running_sumsqf_image,
+                                                         bunch.last_bgcmp_image_timestamp)
+                            # delete it
+                            bunch.last_running_mean_im = None
 
         return draw_points, draw_linesegs
 
@@ -722,6 +758,14 @@ class Tracker(object):
                 per_cam_panel = self.per_cam_panel[cam_id]
             else:
                 self.display_message("not saving data: not stopping")
+
+    def OnToggleTrackingEnabled(self,event):
+        widget = event.GetEventObject()
+        cam_id = self.widget2cam_id[widget]
+
+        with self.tracking_enabled_lock:
+            self.tracking_enabled[cam_id] = widget.GetValue()
+
 
     def quit(self):
         with self.ufmf_writer_lock:
