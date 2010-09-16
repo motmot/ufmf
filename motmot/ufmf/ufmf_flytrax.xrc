@@ -75,7 +75,7 @@
               <object class="sizeritem">
                 <object class="wxTextCtrl" name="ROI2_RADIUS">
                   <value>30</value>
-                  <tooltip>Fraction of found pixel value to clear (reduces moment arm)</tooltip>
+                  <tooltip>Half-width of window size to save</tooltip>
                   <style>wxTE_PROCESS_ENTER</style>
                 </object>
               </object>
@@ -96,7 +96,7 @@
               <object class="sizeritem">
                 <object class="wxTextCtrl" name="INVERSE_ALPHA">
                   <value>50.0</value>
-                  <tooltip>Fraction of found pixel value to clear (reduces moment arm)</tooltip>
+                  <tooltip>Each new frame contributes 1/a to the background image</tooltip>
                   <style>wxTE_PROCESS_ENTER</style>
                 </object>
               </object>
@@ -117,7 +117,7 @@
               <object class="sizeritem">
                 <object class="wxTextCtrl" name="N_SIGMA">
                   <value>5.0</value>
-                  <tooltip>Fraction of found pixel value to clear (reduces moment arm)</tooltip>
+                  <tooltip>number of standard deviations</tooltip>
                   <style>wxTE_PROCESS_ENTER</style>
                 </object>
               </object>
