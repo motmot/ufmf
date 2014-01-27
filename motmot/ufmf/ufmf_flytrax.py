@@ -1,25 +1,20 @@
 from __future__ import division
 from __future__ import with_statement
 
-import sys, threading, Queue, time, socket, math, struct, os
+import sys, threading, Queue, time, socket, math, struct, os, warnings
 import pkg_resources
 
 import motmot.imops.imops as imops
 import motmot.FastImage.FastImage as FastImage
-
 import motmot.realtime_image_analysis.realtime_image_analysis as realtime_image_analysis
-
 import motmot.ufmf.ufmf as ufmf
-
-import numpy
-
 import motmot.wxvalidatedtext.wxvalidatedtext as wxvt
-
-import warnings
+from motmot.fview.utils import SharedValue, lineseg_box
 
 import wx
 from wx import xrc
 import scipy.io
+import numpy
 
 RESFILE = pkg_resources.resource_filename(__name__,"ufmf_flytrax.xrc") # trigger extraction
 RES = xrc.EmptyXmlResource()
@@ -31,27 +26,6 @@ class BunchClass(object):
 class BufferAllocator:
     def __call__(self, w, h):
         return FastImage.FastImage8u(FastImage.Size(w,h))
-
-class SharedValue:
-    def __init__(self):
-        self.evt = threading.Event()
-        self._val = None
-    def set(self,value):
-        # called from producer thread
-        self._val = value
-        self.evt.set()
-    def is_new_value_waiting(self):
-        return self.evt.isSet()
-    def get(self,*args,**kwargs):
-        # called from consumer thread
-        self.evt.wait(*args,**kwargs)
-        val = self._val
-        self.evt.clear()
-        return val
-    def get_nowait(self):
-        val = self._val
-        self.evt.clear()
-        return val
 
 class LockedValue:
     def __init__(self,initial_value=None):
@@ -67,13 +41,6 @@ class LockedValue:
             pass
         return self._val
 
-def corners2linesegs( xmin, ymin, xmax, ymax ):
-    return [ [xmin,ymin,xmin,ymax],
-             [xmin,ymax,xmax,ymax],
-             [xmax,ymax,xmax,ymin],
-             [xmax,ymin,xmin,ymin],
-             ]
-
 class DummyFile():
     def __init__(self):
         self.pos = 0
@@ -83,7 +50,7 @@ class DummyFile():
         return self.pos
 
 class Tracker(object):
-    def __init__(self,wx_parent):
+    def __init__(self,wx_parent,fview_options):
         self.wx_parent = wx_parent
         self.frame = RES.LoadFrame(self.wx_parent,"UFMF_FLYTRAX_FRAME") # make frame main panel
 
@@ -656,7 +623,7 @@ class Tracker(object):
                     else:
                         saved_points = self.dummy_ufmf_writer[cam_id].add_frame( fibuf, timestamp, pts )
 
-                    lineseg_lists = [ corners2linesegs( *corners ) for corners in saved_points]
+                    lineseg_lists = [ lineseg_box( *corners ) for corners in saved_points]
                     for linesegs in lineseg_lists:
                         draw_linesegs.extend( linesegs )
 
