@@ -1134,12 +1134,7 @@ class UfmfSaverV3(UfmfSaverBase):
             raise ValueError('dtype %s not supported'%image_data.dtype)
         assert np_image_data.ndim == 2
         height, width = np_image_data.shape
-        try:
-            assert np_image_data.strides[0] == width*np_image_data.strides[1]
-            assert np_image_data.strides[1] == strides1
-        except:
-            print 'np_image_data.strides, width',np_image_data.strides, width
-            raise
+        assert np_image_data.strides[1] == strides1
         b =  chr(KEYFRAME_CHUNK) + chr(char2) + keyframe_type # chunkid, len(type), type
         b += struct.pack(FMT[self.version].KEYFRAME2,dtype,width,height,timestamp)
         loc = self.file.tell()
@@ -1149,8 +1144,12 @@ class UfmfSaverV3(UfmfSaverBase):
             tmp['loc']=[]
         tmp['timestamp'].append(timestamp)
         tmp['loc'].append(loc)
+        # Write header
         self.file.write(b)
-        self.file.write(buffer(np_image_data))
+        # Write actual image data (dealing with strides).
+        for i in range(height):
+            tmp_buf = buffer(np_image_data[i,:width])
+            self.file.write(tmp_buf)
 
     def _add_frame_regions(self,timestamp,regions):
         n_pts = len(regions)
