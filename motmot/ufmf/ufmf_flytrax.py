@@ -623,7 +623,7 @@ class Tracker(object):
                         realtime_analyzer.max_num_points = (
                             bunch.max_num_points.get_nowait()
                         )
-                    except AttributeError, err:
+                    except AttributeError as err:
                         warnings.warn(
                             "old realtime_analyzer does not support dynamic "
                             "setting of max_num_points"

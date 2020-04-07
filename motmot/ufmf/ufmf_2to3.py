@@ -30,7 +30,7 @@ def convert(filename, short_file_ok=False, progress=False):
                 ignore_preexisting_index=True,
                 is_ok_to_write_regenerated_index=False,
             )
-    except ufmf.ShortUFMFFileError, err:
+    except ufmf.ShortUFMFFileError as err:
         raise ValueError(
             "this file appears to be short. "
             "(Hint: Retry with the --short-file-ok option.)"

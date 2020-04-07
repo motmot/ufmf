@@ -41,7 +41,7 @@ def doit(
     while 1:
         try:
             frame, timestamp = fmf.get_next_frame()
-        except FMF.NoMoreFramesException, err:
+        except FMF.NoMoreFramesException as err:
             break
 
         out_fd.write("%(Y4M_FRAME_MAGIC)s\n" % locals())

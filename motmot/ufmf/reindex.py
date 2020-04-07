@@ -23,7 +23,7 @@ def reindex(filename, short_file_ok=False, progress=False):
                 mode="rb+",
                 index_progress=progress,
             )
-        except ufmf.ShortUFMFFileError, err:
+        except ufmf.ShortUFMFFileError as err:
             raise ValueError(
                 "this file appears to be short. "
                 "(Hint: Retry with the --short-file-ok option.)"

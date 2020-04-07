@@ -27,7 +27,7 @@ def doit(filename=None, output_filename=None, hide_gui=False):
             while 1:
                 frame, timestamp = fmf.get_next_frame()
                 ufmf_writer.add_frame(frame, timestamp, points)
-        except fmf_mod.NoMoreFramesException, err:
+        except fmf_mod.NoMoreFramesException as err:
             pass
 
 
