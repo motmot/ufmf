@@ -16,23 +16,30 @@ from wx import xrc
 import scipy.io
 import numpy
 
-RESFILE = pkg_resources.resource_filename(__name__,"ufmf_flytrax.xrc") # trigger extraction
+RESFILE = pkg_resources.resource_filename(
+    __name__, "ufmf_flytrax.xrc"
+)  # trigger extraction
 RES = xrc.EmptyXmlResource()
 RES.LoadFromString(open(RESFILE).read())
+
 
 class BunchClass(object):
     pass
 
+
 class BufferAllocator:
     def __call__(self, w, h):
-        return FastImage.FastImage8u(FastImage.Size(w,h))
+        return FastImage.FastImage8u(FastImage.Size(w, h))
+
 
 class LockedValue:
-    def __init__(self,initial_value=None):
+    def __init__(self, initial_value=None):
         self._val = initial_value
         self._q = Queue.Queue()
-    def set(self,value):
-        self._q.put( value )
+
+    def set(self, value):
+        self._q.put(value)
+
     def get(self):
         try:
             while 1:
@@ -41,24 +48,30 @@ class LockedValue:
             pass
         return self._val
 
-class DummyFile():
+
+class DummyFile:
     def __init__(self):
         self.pos = 0
-    def write(self,value):
+
+    def write(self, value):
         self.pos += len(value)
+
     def tell(self):
         return self.pos
 
+
 class Tracker(object):
-    def __init__(self,wx_parent,fview_options):
+    def __init__(self, wx_parent, fview_options):
         self.wx_parent = wx_parent
-        self.frame = RES.LoadFrame(self.wx_parent,"UFMF_FLYTRAX_FRAME") # make frame main panel
+        self.frame = RES.LoadFrame(
+            self.wx_parent, "UFMF_FLYTRAX_FRAME"
+        )  # make frame main panel
 
         self.last_n_downstream_hosts = None
 
-        self.frame_nb = xrc.XRCCTRL(self.frame,"FLYTRAX_NOTEBOOK")
-        self.status_message = xrc.XRCCTRL(self.frame,"STATUS_MESSAGE")
-        self.status_message2 = xrc.XRCCTRL(self.frame,"STATUS_MESSAGE2")
+        self.frame_nb = xrc.XRCCTRL(self.frame, "FLYTRAX_NOTEBOOK")
+        self.status_message = xrc.XRCCTRL(self.frame, "STATUS_MESSAGE")
+        self.status_message2 = xrc.XRCCTRL(self.frame, "STATUS_MESSAGE2")
         self.new_image = False
 
         self.cam_ids = []
@@ -116,17 +129,15 @@ class Tracker(object):
     def get_frame(self):
         return self.frame
 
-    def set_view_flip_LR( self, val ):
+    def set_view_flip_LR(self, val):
         pass
 
-    def set_view_rotate_180(self,val):
+    def set_view_rotate_180(self, val):
         pass
 
-    def camera_starting_notification(self,
-                                     cam_id,
-                                     pixel_format=None,
-                                     max_width=None,
-                                     max_height=None):
+    def camera_starting_notification(
+        self, cam_id, pixel_format=None, max_width=None, max_height=None
+    ):
         """
 
         cam_id is simply used as a dict key
@@ -139,145 +150,133 @@ class Tracker(object):
         bunch.max_num_points = SharedValue()
         bunch.max_num_points.set(10)
 
-        self.bunches[cam_id]=bunch
-        self.pixel_format[cam_id]=pixel_format
+        self.bunches[cam_id] = bunch
+        self.pixel_format[cam_id] = pixel_format
         # setup GUI stuff
-        if len(self.cam_ids)==0:
+        if len(self.cam_ids) == 0:
             # adding first camera
             self.frame_nb.DeleteAllPages()
 
         #  make new per-camera wx panel
-        per_cam_panel = RES.LoadPanel(self.frame_nb,"PER_CAM_PANEL")
+        per_cam_panel = RES.LoadPanel(self.frame_nb, "PER_CAM_PANEL")
         self.per_cam_panel[cam_id] = per_cam_panel
         per_cam_panel.SetAutoLayout(True)
-        self.frame_nb.AddPage(per_cam_panel,cam_id)
+        self.frame_nb.AddPage(per_cam_panel, cam_id)
 
-        ctrl = xrc.XRCCTRL(per_cam_panel,"TAKE_BG_IMAGE")
-        self.widget2cam_id[ctrl]=cam_id
-        wx.EVT_BUTTON(ctrl,
-                      ctrl.GetId(),
-                      self.OnTakeBgImage)
+        ctrl = xrc.XRCCTRL(per_cam_panel, "TAKE_BG_IMAGE")
+        self.widget2cam_id[ctrl] = cam_id
+        wx.EVT_BUTTON(ctrl, ctrl.GetId(), self.OnTakeBgImage)
 
         self.ongoing_bg_image_update_interval[cam_id] = LockedValue(50)
-        ctrl = xrc.XRCCTRL(per_cam_panel,"BACKGROUND_IMAGE_UPDATE_INTERVAL")
-        ctrl.SetValue( str(self.ongoing_bg_image_update_interval[cam_id].get()))
-        self.widget2cam_id[ctrl]=cam_id
+        ctrl = xrc.XRCCTRL(per_cam_panel, "BACKGROUND_IMAGE_UPDATE_INTERVAL")
+        ctrl.SetValue(str(self.ongoing_bg_image_update_interval[cam_id].get()))
+        self.widget2cam_id[ctrl] = cam_id
         validator = wxvt.setup_validated_integer_callback(
-            ctrl,
-            ctrl.GetId(),
-            self.OnSetBackgroundUpdateInterval)
+            ctrl, ctrl.GetId(), self.OnSetBackgroundUpdateInterval
+        )
         self.xrcid2validator[cam_id]["BACKGROUND_IMAGE_UPDATE_INTERVAL"] = validator
 
-        ctrl = xrc.XRCCTRL(per_cam_panel,"CLEAR_THRESHOLD")
-        self.widget2cam_id[ctrl]=cam_id
+        ctrl = xrc.XRCCTRL(per_cam_panel, "CLEAR_THRESHOLD")
+        self.widget2cam_id[ctrl] = cam_id
         validator = wxvt.setup_validated_float_callback(
-            ctrl,
-            ctrl.GetId(),
-            self.OnClearThreshold,
-            ignore_initial_value=True)
+            ctrl, ctrl.GetId(), self.OnClearThreshold, ignore_initial_value=True
+        )
         self.xrcid2validator[cam_id]["CLEAR_THRESHOLD"] = validator
 
-        ctrl = xrc.XRCCTRL(per_cam_panel,"DIFF_THRESHOLD")
-        self.widget2cam_id[ctrl]=cam_id
+        ctrl = xrc.XRCCTRL(per_cam_panel, "DIFF_THRESHOLD")
+        self.widget2cam_id[ctrl] = cam_id
         validator = wxvt.setup_validated_integer_callback(
-            ctrl,
-            ctrl.GetId(),
-            self.OnDiffThreshold,
-            ignore_initial_value=True)
+            ctrl, ctrl.GetId(), self.OnDiffThreshold, ignore_initial_value=True
+        )
         self.xrcid2validator[cam_id]["DIFF_THRESHOLD"] = validator
 
-        ctrl = xrc.XRCCTRL(per_cam_panel,"ROI2_RADIUS")
-        self.widget2cam_id[ctrl]=cam_id
+        ctrl = xrc.XRCCTRL(per_cam_panel, "ROI2_RADIUS")
+        self.widget2cam_id[ctrl] = cam_id
         validator = wxvt.setup_validated_integer_callback(
-            ctrl,
-            ctrl.GetId(),
-            self.OnRoi2Radius,
-            ignore_initial_value=True)
+            ctrl, ctrl.GetId(), self.OnRoi2Radius, ignore_initial_value=True
+        )
         self.xrcid2validator[cam_id]["ROI2_RADIUS"] = validator
 
-        ctrl = xrc.XRCCTRL(per_cam_panel,"INVERSE_ALPHA")
-        self.widget2cam_id[ctrl]=cam_id
+        ctrl = xrc.XRCCTRL(per_cam_panel, "INVERSE_ALPHA")
+        self.widget2cam_id[ctrl] = cam_id
         validator = wxvt.setup_validated_float_callback(
-            ctrl,
-            ctrl.GetId(),
-            self.OnInverseAlpha,
-            ignore_initial_value=True)
+            ctrl, ctrl.GetId(), self.OnInverseAlpha, ignore_initial_value=True
+        )
         self.xrcid2validator[cam_id]["INVERSE_ALPHA"] = validator
 
-        ctrl = xrc.XRCCTRL(per_cam_panel,"N_SIGMA")
-        self.widget2cam_id[ctrl]=cam_id
+        ctrl = xrc.XRCCTRL(per_cam_panel, "N_SIGMA")
+        self.widget2cam_id[ctrl] = cam_id
         validator = wxvt.setup_validated_float_callback(
-            ctrl,
-            ctrl.GetId(),
-            self.OnNSigma,
-            ignore_initial_value=True)
+            ctrl, ctrl.GetId(), self.OnNSigma, ignore_initial_value=True
+        )
         self.xrcid2validator[cam_id]["N_SIGMA"] = validator
 
-        ctrl = xrc.XRCCTRL(per_cam_panel,"MAX_NUM_POINTS")
-        self.widget2cam_id[ctrl]=cam_id
+        ctrl = xrc.XRCCTRL(per_cam_panel, "MAX_NUM_POINTS")
+        self.widget2cam_id[ctrl] = cam_id
         validator = wxvt.setup_validated_integer_callback(
-            ctrl,
-            ctrl.GetId(),
-            self.OnMaxNPoints,
-            ignore_initial_value=True)
+            ctrl, ctrl.GetId(), self.OnMaxNPoints, ignore_initial_value=True
+        )
         self.xrcid2validator[cam_id]["MAX_NUM_POINTS"] = validator
         ctrl.SetValue(str(bunch.max_num_points.get_nowait()))
-        validator.set_state('valid')
+        validator.set_state("valid")
 
-        start_recording_widget = xrc.XRCCTRL(per_cam_panel,"START_RECORDING")
-        self.widget2cam_id[start_recording_widget]=cam_id
-        wx.EVT_BUTTON(start_recording_widget,
-                      start_recording_widget.GetId(),
-                      self.OnStartRecording)
+        start_recording_widget = xrc.XRCCTRL(per_cam_panel, "START_RECORDING")
+        self.widget2cam_id[start_recording_widget] = cam_id
+        wx.EVT_BUTTON(
+            start_recording_widget,
+            start_recording_widget.GetId(),
+            self.OnStartRecording,
+        )
 
-        stop_recording_widget = xrc.XRCCTRL(per_cam_panel,"STOP_RECORDING")
-        self.widget2cam_id[stop_recording_widget]=cam_id
-        wx.EVT_BUTTON(stop_recording_widget,
-                      stop_recording_widget.GetId(),
-                      self.OnStopRecording)
+        stop_recording_widget = xrc.XRCCTRL(per_cam_panel, "STOP_RECORDING")
+        self.widget2cam_id[stop_recording_widget] = cam_id
+        wx.EVT_BUTTON(
+            stop_recording_widget, stop_recording_widget.GetId(), self.OnStopRecording
+        )
 
-        tracking_enabled_widget = xrc.XRCCTRL(per_cam_panel,"ENABLED_CHECKBOX")
-        self.widget2cam_id[tracking_enabled_widget]=cam_id
-        wx.EVT_CHECKBOX(tracking_enabled_widget,
-                        tracking_enabled_widget.GetId(),
-                        self.OnToggleTrackingEnabled)
+        tracking_enabled_widget = xrc.XRCCTRL(per_cam_panel, "ENABLED_CHECKBOX")
+        self.widget2cam_id[tracking_enabled_widget] = cam_id
+        wx.EVT_CHECKBOX(
+            tracking_enabled_widget,
+            tracking_enabled_widget.GetId(),
+            self.OnToggleTrackingEnabled,
+        )
 
-        save_status_widget = xrc.XRCCTRL(per_cam_panel,"SAVE_STATUS")
+        save_status_widget = xrc.XRCCTRL(per_cam_panel, "SAVE_STATUS")
         self.save_status_widget[cam_id] = save_status_widget
 
         self.save_data_prefix_widget[cam_id] = xrc.XRCCTRL(
-            per_cam_panel,"SAVE_DATA_PREFIX")
-        self.widget2cam_id[self.save_data_prefix_widget[cam_id]]=cam_id
+            per_cam_panel, "SAVE_DATA_PREFIX"
+        )
+        self.widget2cam_id[self.save_data_prefix_widget[cam_id]] = cam_id
 
-        ctrl = xrc.XRCCTRL(per_cam_panel,"SAVE_DATA_DIR_BUTTON")
-        self.widget2cam_id[ctrl]=cam_id
-        wx.EVT_BUTTON(ctrl,
-                      ctrl.GetId(),
-                      self.OnSetSavePath)
+        ctrl = xrc.XRCCTRL(per_cam_panel, "SAVE_DATA_DIR_BUTTON")
+        self.widget2cam_id[ctrl] = cam_id
+        wx.EVT_BUTTON(ctrl, ctrl.GetId(), self.OnSetSavePath)
 
-#####################
+        #####################
 
         # setup non-GUI stuff
         self.cam_ids.append(cam_id)
 
         self.display_active[cam_id] = threading.Event()
         if len(self.cam_ids) > 1:
-            raise NotImplementedError('if >1 camera supported, implement setting display_active on notebook page change')
+            raise NotImplementedError(
+                "if >1 camera supported, implement setting display_active on notebook page change"
+            )
         else:
             self.display_active[cam_id].set()
 
         self.clear_and_take_bg_image[cam_id] = threading.Event()
-        self.clear_and_take_bg_image[cam_id].set() # start off setting background
+        self.clear_and_take_bg_image[cam_id].set()  # start off setting background
 
         self.ticks_since_last_update[cam_id] = 0
-        lbrt = (0,0,max_width-1,max_height-1)
+        lbrt = (0, 0, max_width - 1, max_height - 1)
 
-        roi2_radius=int(xrc.XRCCTRL(per_cam_panel,"ROI2_RADIUS").GetValue())
-        ra = realtime_image_analysis.RealtimeAnalyzer(lbrt,
-                                                      max_width,
-                                                      max_height,
-                                                      bunch.max_num_points.get_nowait(),
-                                                      roi2_radius)
+        roi2_radius = int(xrc.XRCCTRL(per_cam_panel, "ROI2_RADIUS").GetValue())
+        ra = realtime_image_analysis.RealtimeAnalyzer(
+            lbrt, max_width, max_height, bunch.max_num_points.get_nowait(), roi2_radius
+        )
         self.realtime_analyzer[cam_id] = ra
 
         self.new_clear_threshold[cam_id] = threading.Event()
@@ -288,33 +287,35 @@ class Tracker(object):
         self.diff_threshold_value[cam_id] = ra.diff_threshold
         self.roi2_radius_value[cam_id] = ra.roi2_radius
 
-        ctrl = xrc.XRCCTRL(per_cam_panel,"CLEAR_THRESHOLD")
+        ctrl = xrc.XRCCTRL(per_cam_panel, "CLEAR_THRESHOLD")
         validator = self.xrcid2validator[cam_id]["CLEAR_THRESHOLD"]
-        ctrl.SetValue( '%.2f'%ra.clear_threshold )
-        validator.set_state('valid')
+        ctrl.SetValue("%.2f" % ra.clear_threshold)
+        validator.set_state("valid")
 
-        ctrl = xrc.XRCCTRL(per_cam_panel,"DIFF_THRESHOLD")
+        ctrl = xrc.XRCCTRL(per_cam_panel, "DIFF_THRESHOLD")
         validator = self.xrcid2validator[cam_id]["DIFF_THRESHOLD"]
-        ctrl.SetValue( '%d'%ra.diff_threshold )
-        validator.set_state('valid')
+        ctrl.SetValue("%d" % ra.diff_threshold)
+        validator.set_state("valid")
 
-        ctrl = xrc.XRCCTRL(per_cam_panel,"ROI2_RADIUS")
+        ctrl = xrc.XRCCTRL(per_cam_panel, "ROI2_RADIUS")
         validator = self.xrcid2validator[cam_id]["ROI2_RADIUS"]
-        ctrl.SetValue( '%d'%ra.roi2_radius )
-        validator.set_state('valid')
+        ctrl.SetValue("%d" % ra.roi2_radius)
+        validator.set_state("valid")
 
-        max_frame_size = FastImage.Size( max_width, max_height )
+        max_frame_size = FastImage.Size(max_width, max_height)
         self.max_frame_size[cam_id] = max_frame_size
 
         bunch.inverse_alpha = SharedValue()
-        bunch.inverse_alpha.set( float(xrc.XRCCTRL(per_cam_panel,"INVERSE_ALPHA").GetValue()) )
+        bunch.inverse_alpha.set(
+            float(xrc.XRCCTRL(per_cam_panel, "INVERSE_ALPHA").GetValue())
+        )
         validator = self.xrcid2validator[cam_id]["INVERSE_ALPHA"]
-        validator.set_state('valid')
+        validator.set_state("valid")
 
         bunch.n_sigma = SharedValue()
-        bunch.n_sigma.set( float(xrc.XRCCTRL(per_cam_panel,"N_SIGMA").GetValue()) )
+        bunch.n_sigma.set(float(xrc.XRCCTRL(per_cam_panel, "N_SIGMA").GetValue()))
         validator = self.xrcid2validator[cam_id]["N_SIGMA"]
-        validator.set_state('valid')
+        validator.set_state("valid")
 
         self.frame.Fit()
 
@@ -322,7 +323,7 @@ class Tracker(object):
 
         bunch.running_mean_im_full = FastImage.FastImage32f(max_frame_size)
         bunch.running_sumsqf_full = FastImage.FastImage32f(max_frame_size)
-        bunch.running_sumsqf_full.set_val(0,max_frame_size)
+        bunch.running_sumsqf_full.set_val(0, max_frame_size)
         bunch.fastframef32_tmp_full = FastImage.FastImage32f(max_frame_size)
         bunch.mean2_full = FastImage.FastImage32f(max_frame_size)
         bunch.std2_full = FastImage.FastImage32f(max_frame_size)
@@ -333,48 +334,49 @@ class Tracker(object):
 
         dummy_file = DummyFile()
         with self.dummy_ufmf_writer_lock:
-            self.dummy_ufmf_writer[cam_id] = ufmf.AutoShrinkUfmfSaverV3( dummy_file,
-                                                                         coding = self.pixel_format[cam_id],
-                                                                         max_width=self.max_frame_size[cam_id].w,
-                                                                         max_height=self.max_frame_size[cam_id].h,
-                                                                         )
+            self.dummy_ufmf_writer[cam_id] = ufmf.AutoShrinkUfmfSaverV3(
+                dummy_file,
+                coding=self.pixel_format[cam_id],
+                max_width=self.max_frame_size[cam_id].w,
+                max_height=self.max_frame_size[cam_id].h,
+            )
 
-
-    def get_buffer_allocator(self,cam_id):
+    def get_buffer_allocator(self, cam_id):
         return BufferAllocator()
 
     def get_plugin_name(self):
-        return 'UFMF FlyTrax'
+        return "UFMF FlyTrax"
 
-    def OnTakeBgImage(self,event):
+    def OnTakeBgImage(self, event):
         widget = event.GetEventObject()
         cam_id = self.widget2cam_id[widget]
 
         per_cam_panel = self.per_cam_panel[cam_id]
-        ctrl = xrc.XRCCTRL(per_cam_panel,"TAKE_BG_IMAGE_ALLOW_WHEN_SAVING")
+        ctrl = xrc.XRCCTRL(per_cam_panel, "TAKE_BG_IMAGE_ALLOW_WHEN_SAVING")
         with self.ufmf_writer_lock:
 
             if not ctrl.GetValue() and cam_id in self.ufmf_writer:
 
-                dlg = wx.MessageDialog(self.wx_parent,
-                                       'Saving data - cannot take background image',
-                                       'UFMF FlyTrax error',
-                                       wx.OK | wx.ICON_ERROR
-                                       )
+                dlg = wx.MessageDialog(
+                    self.wx_parent,
+                    "Saving data - cannot take background image",
+                    "UFMF FlyTrax error",
+                    wx.OK | wx.ICON_ERROR,
+                )
                 dlg.ShowModal()
                 dlg.Destroy()
                 return
 
         self.clear_and_take_bg_image[cam_id].set()
-        self.display_message('capturing background image')
+        self.display_message("capturing background image")
 
-    def OnSetBackgroundUpdateInterval(self,event):
+    def OnSetBackgroundUpdateInterval(self, event):
         widget = event.GetEventObject()
         cam_id = self.widget2cam_id[widget]
         val = int(widget.GetValue())
         self.ongoing_bg_image_update_interval[cam_id].set(val)
 
-    def OnClearThreshold(self,event):
+    def OnClearThreshold(self, event):
         widget = event.GetEventObject()
         cam_id = self.widget2cam_id[widget]
         newvalstr = widget.GetValue()
@@ -386,10 +388,10 @@ class Tracker(object):
             # only touch realtime_analysis in other thread
             self.clear_threshold_value[cam_id] = newval
             self.new_clear_threshold[cam_id].set()
-            self.display_message('set clear threshold %s'%str(newval))
+            self.display_message("set clear threshold %s" % str(newval))
         event.Skip()
 
-    def OnDiffThreshold(self,event):
+    def OnDiffThreshold(self, event):
         widget = event.GetEventObject()
         cam_id = self.widget2cam_id[widget]
         newvalstr = widget.GetValue()
@@ -401,10 +403,10 @@ class Tracker(object):
             # only touch realtime_analysis in other thread
             self.diff_threshold_value[cam_id] = newval
             self.new_diff_threshold[cam_id].set()
-            self.display_message('set difference threshold %d'%newval)
+            self.display_message("set difference threshold %d" % newval)
         event.Skip()
 
-    def OnRoi2Radius(self,event):
+    def OnRoi2Radius(self, event):
         widget = event.GetEventObject()
         cam_id = self.widget2cam_id[widget]
         newvalstr = widget.GetValue()
@@ -416,10 +418,10 @@ class Tracker(object):
             # only touch realtime_analysis in other thread
             self.roi2_radius_value[cam_id] = newval
             self.new_roi2_radius[cam_id].set()
-            self.display_message('set UFMF window size %d'%newval)
+            self.display_message("set UFMF window size %d" % newval)
         event.Skip()
 
-    def OnInverseAlpha(self,event):
+    def OnInverseAlpha(self, event):
         widget = event.GetEventObject()
         cam_id = self.widget2cam_id[widget]
         bunch = self.bunches[cam_id]
@@ -430,10 +432,10 @@ class Tracker(object):
         except ValueError:
             pass
         else:
-            bunch.inverse_alpha.set( newval )
+            bunch.inverse_alpha.set(newval)
         event.Skip()
 
-    def OnNSigma(self,event):
+    def OnNSigma(self, event):
         widget = event.GetEventObject()
         cam_id = self.widget2cam_id[widget]
         bunch = self.bunches[cam_id]
@@ -444,10 +446,10 @@ class Tracker(object):
         except ValueError:
             pass
         else:
-            bunch.n_sigma.set( newval )
+            bunch.n_sigma.set(newval)
         event.Skip()
 
-    def OnMaxNPoints(self,event):
+    def OnMaxNPoints(self, event):
         widget = event.GetEventObject()
         cam_id = self.widget2cam_id[widget]
         bunch = self.bunches[cam_id]
@@ -458,17 +460,18 @@ class Tracker(object):
         except ValueError:
             pass
         else:
-            bunch.max_num_points.set( newval )
+            bunch.max_num_points.set(newval)
         event.Skip()
 
-    def process_frame(self,cam_id,buf,buf_offset,timestamp,framenumber):
-        if self.pixel_format[cam_id]=='YUV422':
-            buf = imops.yuv422_to_mono8( numpy.asarray(buf) ) # convert
-        elif not (self.pixel_format[cam_id].startswith('MONO8') or
-                  self.pixel_format[cam_id].startswith('RAW8')):
+    def process_frame(self, cam_id, buf, buf_offset, timestamp, framenumber):
+        if self.pixel_format[cam_id] == "YUV422":
+            buf = imops.yuv422_to_mono8(numpy.asarray(buf))  # convert
+        elif not (
+            self.pixel_format[cam_id].startswith("MONO8")
+            or self.pixel_format[cam_id].startswith("RAW8")
+        ):
             warnings.warn("flytrax plugin incompatible with data format")
             return [], []
-
 
         bunch = self.bunches[cam_id]
 
@@ -476,47 +479,56 @@ class Tracker(object):
         clear_and_take_bg_image = self.clear_and_take_bg_image[cam_id]
 
         # this is called in realtime thread
-        fibuf = FastImage.asfastimage(buf) # FastImage view of image data (hardware ROI)
-        l,b = buf_offset
-        lbrt = l, b, l+fibuf.size.w-1, b+fibuf.size.h-1
+        fibuf = FastImage.asfastimage(
+            buf
+        )  # FastImage view of image data (hardware ROI)
+        l, b = buf_offset
+        lbrt = l, b, l + fibuf.size.w - 1, b + fibuf.size.h - 1
 
-        running_mean_im = bunch.running_mean_im_full.roi(l, b, fibuf.size)  # set ROI view
+        running_mean_im = bunch.running_mean_im_full.roi(
+            l, b, fibuf.size
+        )  # set ROI view
         running_sumsqf = bunch.running_sumsqf_full.roi(l, b, fibuf.size)  # set ROI view
 
         new_clear_threshold = self.new_clear_threshold[cam_id]
         new_diff_threshold = self.new_diff_threshold[cam_id]
         new_roi2_radius = self.new_roi2_radius[cam_id]
         realtime_analyzer = self.realtime_analyzer[cam_id]
-        realtime_analyzer.roi = lbrt # hardware ROI
+        realtime_analyzer.roi = lbrt  # hardware ROI
         max_frame_size = self.max_frame_size[cam_id]
         display_active = self.display_active[cam_id]
 
         use_roi2 = True
 
-        use_cmp = False # use variance-based background subtraction/analysis
+        use_cmp = False  # use variance-based background subtraction/analysis
         draw_points = []
         draw_linesegs = []
 
-        running_mean8u_im_full = realtime_analyzer.get_image_view('mean')
+        running_mean8u_im_full = realtime_analyzer.get_image_view("mean")
         running_mean8u_im = running_mean8u_im_full.roi(l, b, fibuf.size)
 
-        if (bunch.initial_take_bg_state is not None or
-            clear_and_take_bg_image.isSet()):
+        if bunch.initial_take_bg_state is not None or clear_and_take_bg_image.isSet():
             src_fullframe_fi = fibuf.get_8u_copy(max_frame_size)
 
         if bunch.initial_take_bg_state is not None:
-            assert bunch.initial_take_bg_state == 'gather'
+            assert bunch.initial_take_bg_state == "gather"
 
             n_initial_take = 5
-            bunch.initial_take_frames.append( numpy.array(src_fullframe_fi) ) # copied above
-            if len( bunch.initial_take_frames ) >= n_initial_take:
+            bunch.initial_take_frames.append(
+                numpy.array(src_fullframe_fi)
+            )  # copied above
+            if len(bunch.initial_take_frames) >= n_initial_take:
 
-                initial_take_frames = numpy.array( bunch.initial_take_frames, dtype=numpy.float32 )
-                mean_frame = numpy.mean( initial_take_frames, axis=0)
-                sumsqf_frame = numpy.sum(initial_take_frames**2, axis=0)/len( initial_take_frames )
+                initial_take_frames = numpy.array(
+                    bunch.initial_take_frames, dtype=numpy.float32
+                )
+                mean_frame = numpy.mean(initial_take_frames, axis=0)
+                sumsqf_frame = numpy.sum(initial_take_frames ** 2, axis=0) / len(
+                    initial_take_frames
+                )
 
-                numpy.asarray(running_mean_im)[:,:] = mean_frame
-                numpy.asarray(running_sumsqf)[:,:] = sumsqf_frame
+                numpy.asarray(running_mean_im)[:, :] = mean_frame
+                numpy.asarray(running_sumsqf)[:, :] = sumsqf_frame
 
                 # we're done with initial transient, set stuff
                 do_bg_maint = True
@@ -524,7 +536,7 @@ class Tracker(object):
                 bunch.initial_take_frames = []
 
         if clear_and_take_bg_image.isSet():
-            bunch.initial_take_bg_state = 'gather'
+            bunch.initial_take_bg_state = "gather"
             bunch.initial_take_frames = []
             with self.bg_update_lock:
                 bunch.last_running_mean_im = None
@@ -534,64 +546,65 @@ class Tracker(object):
             self.ticks_since_last_update[cam_id] += 1
 
             update_interval = self.ongoing_bg_image_update_interval[cam_id].get()
-            if self.ticks_since_last_update[cam_id]%update_interval == 0:
+            if self.ticks_since_last_update[cam_id] % update_interval == 0:
                 do_bg_maint = True
 
         if do_bg_maint:
             hw_roi_frame = fibuf
             cur_fisize = hw_roi_frame.size
-            bg_frame_alpha = 1.0/bunch.inverse_alpha.get_nowait()
+            bg_frame_alpha = 1.0 / bunch.inverse_alpha.get_nowait()
             n_sigma = bunch.n_sigma.get_nowait()
             bright_non_gaussian_cutoff = 255
             bright_non_gaussian_replacement = 255
 
-            compareframe8u_full = realtime_analyzer.get_image_view('cmp')
+            compareframe8u_full = realtime_analyzer.get_image_view("cmp")
             compareframe8u = compareframe8u_full.roi(l, b, fibuf.size)
             fastframef32_tmp = bunch.fastframef32_tmp_full.roi(l, b, fibuf.size)
 
             mean2 = bunch.mean2_full.roi(l, b, fibuf.size)
-            std2  =  bunch.std2_full.roi(l, b, fibuf.size)
+            std2 = bunch.std2_full.roi(l, b, fibuf.size)
             running_stdframe = bunch.running_stdframe_full.roi(l, b, fibuf.size)
 
             noisy_pixels_mask = bunch.noisy_pixels_mask_full.roi(l, b, fibuf.size)
 
             realtime_image_analysis.do_bg_maint(
-                running_mean_im,#in
-                hw_roi_frame,#in
-                cur_fisize,#in
-                bg_frame_alpha, #in
+                running_mean_im,  # in
+                hw_roi_frame,  # in
+                cur_fisize,  # in
+                bg_frame_alpha,  # in
                 running_mean8u_im,
                 fastframef32_tmp,
-                running_sumsqf, #in
+                running_sumsqf,  # in
                 mean2,
                 std2,
                 running_stdframe,
-                n_sigma,#in
+                n_sigma,  # in
                 compareframe8u,
-                bright_non_gaussian_cutoff,#in
-                noisy_pixels_mask,#in
-                bright_non_gaussian_replacement,#in
-                bench=0 )
-                #debug=0)
-            #chainbuf.real_std_est= tmpresult
+                bright_non_gaussian_cutoff,  # in
+                noisy_pixels_mask,  # in
+                bright_non_gaussian_replacement,  # in
+                bench=0,
+            )
+            # debug=0)
+            # chainbuf.real_std_est= tmpresult
             bg_changed = True
             bg_frame_number = 0
 
             with self.bg_update_lock:
-                bunch.last_running_mean_im = running_mean_im # XXX should copy?
-                bunch.last_running_sumsqf_image = running_sumsqf # XXX should copy?
+                bunch.last_running_mean_im = running_mean_im  # XXX should copy?
+                bunch.last_running_sumsqf_image = running_sumsqf  # XXX should copy?
                 bunch.last_bgcmp_image_timestamp = timestamp
 
         if new_clear_threshold.isSet():
             nv = self.clear_threshold_value[cam_id]
             realtime_analyzer.clear_threshold = nv
-            #print 'set clear',nv
+            # print 'set clear',nv
             new_clear_threshold.clear()
 
         if new_diff_threshold.isSet():
             nv = self.diff_threshold_value[cam_id]
             realtime_analyzer.diff_threshold = nv
-            #print 'set diff',nv
+            # print 'set diff',nv
             new_diff_threshold.clear()
 
         if new_roi2_radius.isSet():
@@ -602,53 +615,63 @@ class Tracker(object):
         n_pts = 0
         with self.ufmf_writer_lock:
             with self.tracking_enabled_lock:
-                ufmf_writer = self.ufmf_writer.get(cam_id,None)
-                tracking_enabled = self.tracking_enabled.get(cam_id,False)
+                ufmf_writer = self.ufmf_writer.get(cam_id, None)
+                tracking_enabled = self.tracking_enabled.get(cam_id, False)
 
                 if (ufmf_writer is not None) or tracking_enabled:
                     try:
-                        realtime_analyzer.max_num_points = bunch.max_num_points.get_nowait()
+                        realtime_analyzer.max_num_points = (
+                            bunch.max_num_points.get_nowait()
+                        )
                     except AttributeError, err:
-                        warnings.warn('old realtime_analyzer does not support dynamic '
-                                      'setting of max_num_points')
-                    points = realtime_analyzer.do_work(fibuf,
-                                                       timestamp, framenumber, use_roi2,
-                                                       use_cmp=use_cmp)
+                        warnings.warn(
+                            "old realtime_analyzer does not support dynamic "
+                            "setting of max_num_points"
+                        )
+                    points = realtime_analyzer.do_work(
+                        fibuf, timestamp, framenumber, use_roi2, use_cmp=use_cmp
+                    )
                     pts = []
-                    w = h = realtime_analyzer.roi2_radius*2
+                    w = h = realtime_analyzer.roi2_radius * 2
                     for pt in points:
-                        pts.append( (pt[0], pt[1], w, h ) )
+                        pts.append((pt[0], pt[1], w, h))
                     if ufmf_writer is not None:
-                        saved_points = ufmf_writer.add_frame( fibuf, timestamp, pts )
+                        saved_points = ufmf_writer.add_frame(fibuf, timestamp, pts)
                     else:
-                        saved_points = self.dummy_ufmf_writer[cam_id].add_frame( fibuf, timestamp, pts )
+                        saved_points = self.dummy_ufmf_writer[cam_id].add_frame(
+                            fibuf, timestamp, pts
+                        )
 
-                    lineseg_lists = [ lineseg_box( *corners ) for corners in saved_points]
+                    lineseg_lists = [lineseg_box(*corners) for corners in saved_points]
                     for linesegs in lineseg_lists:
-                        draw_linesegs.extend( linesegs )
+                        draw_linesegs.extend(linesegs)
 
                     # save any pending background model updates
                     with self.bg_update_lock:
                         if bunch.last_running_mean_im is not None:
 
                             if ufmf_writer is not None:
-                                ufmf_writer.add_keyframe('mean',
-                                                         bunch.last_running_mean_im,
-                                                         bunch.last_bgcmp_image_timestamp)
-                                ufmf_writer.add_keyframe('sumsq',
-                                                         bunch.last_running_sumsqf_image,
-                                                         bunch.last_bgcmp_image_timestamp)
+                                ufmf_writer.add_keyframe(
+                                    "mean",
+                                    bunch.last_running_mean_im,
+                                    bunch.last_bgcmp_image_timestamp,
+                                )
+                                ufmf_writer.add_keyframe(
+                                    "sumsq",
+                                    bunch.last_running_sumsqf_image,
+                                    bunch.last_bgcmp_image_timestamp,
+                                )
                             # delete it
                             bunch.last_running_mean_im = None
 
         return draw_points, draw_linesegs
 
-    def display_message(self,msg,duration_msec=2000):
+    def display_message(self, msg, duration_msec=2000):
         self.status_message.SetLabel(msg)
-        self.timer_clear_message.Start(duration_msec,wx.TIMER_ONE_SHOT)
+        self.timer_clear_message.Start(duration_msec, wx.TIMER_ONE_SHOT)
 
-    def OnClearMessage(self,evt):
-        self.status_message.SetLabel('')
+    def OnClearMessage(self, evt):
+        self.status_message.SetLabel("")
 
     def OnSetSavePath(self, event):
         widget = event.GetEventObject()
@@ -657,19 +680,21 @@ class Tracker(object):
         prefix = self.save_data_prefix_widget[cam_id].GetValue()
         defaultPath, prefix_fname = os.path.split(prefix)
 
-        dlg = wx.DirDialog( self.frame, "ufmf record directory",
-                            style = wx.DD_DEFAULT_STYLE | wx.DD_NEW_DIR_BUTTON,
-                            defaultPath = defaultPath,
-                            )
+        dlg = wx.DirDialog(
+            self.frame,
+            "ufmf record directory",
+            style=wx.DD_DEFAULT_STYLE | wx.DD_NEW_DIR_BUTTON,
+            defaultPath=defaultPath,
+        )
         try:
             if dlg.ShowModal() == wx.ID_OK:
                 save_path_dir = dlg.GetPath()
-                prefix = os.path.join( save_path_dir, prefix_fname )
+                prefix = os.path.join(save_path_dir, prefix_fname)
                 self.save_data_prefix_widget[cam_id].SetValue(prefix)
         finally:
             dlg.Destroy()
 
-    def OnStartRecording(self,event):
+    def OnStartRecording(self, event):
         widget = event.GetEventObject()
         cam_id = self.widget2cam_id[widget]
 
@@ -688,31 +713,32 @@ class Tracker(object):
                 last_bgcmp_image_timestamp = bunch.last_bgcmp_image_timestamp
                 last_running_sumsqf_image = bunch.last_running_sumsqf_image
 
-            bunch.last_running_mean_im = None # clear
+            bunch.last_running_mean_im = None  # clear
 
         prefix = self.save_data_prefix_widget[cam_id].GetValue()
-        fname = prefix+time.strftime('%Y%m%d_%H%M%S.ufmf')
-        ufmf_writer = ufmf.AutoShrinkUfmfSaverV3( fname,
-                                                  coding = self.pixel_format[cam_id],
-                                                  max_width=self.max_frame_size[cam_id].w,
-                                                  max_height=self.max_frame_size[cam_id].h,
-                                                  )
+        fname = prefix + time.strftime("%Y%m%d_%H%M%S.ufmf")
+        ufmf_writer = ufmf.AutoShrinkUfmfSaverV3(
+            fname,
+            coding=self.pixel_format[cam_id],
+            max_width=self.max_frame_size[cam_id].w,
+            max_height=self.max_frame_size[cam_id].h,
+        )
         bunch = self.bunches[cam_id]
 
         # save initial background model
         if last_running_mean_im is not None:
-            ufmf_writer.add_keyframe('mean',
-                                     last_running_mean_im,
-                                     last_bgcmp_image_timestamp)
-            ufmf_writer.add_keyframe('sumsq',
-                                     last_running_sumsqf_image,
-                                     last_bgcmp_image_timestamp)
+            ufmf_writer.add_keyframe(
+                "mean", last_running_mean_im, last_bgcmp_image_timestamp
+            )
+            ufmf_writer.add_keyframe(
+                "sumsq", last_running_sumsqf_image, last_bgcmp_image_timestamp
+            )
         with self.ufmf_writer_lock:
             self.ufmf_writer[cam_id] = ufmf_writer
-        self.save_status_widget[cam_id].SetLabel('saving')
-        self.display_message('saving data to %s'%fname)
+        self.save_status_widget[cam_id].SetLabel("saving")
+        self.display_message("saving data to %s" % fname)
 
-    def OnStopRecording(self,event):
+    def OnStopRecording(self, event):
         widget = event.GetEventObject()
         cam_id = self.widget2cam_id[widget]
 
@@ -720,21 +746,20 @@ class Tracker(object):
             if cam_id in self.ufmf_writer:
                 self.ufmf_writer[cam_id].close()
                 del self.ufmf_writer[cam_id]
-                self.save_status_widget[cam_id].SetLabel('not saving')
+                self.save_status_widget[cam_id].SetLabel("not saving")
 
                 per_cam_panel = self.per_cam_panel[cam_id]
             else:
                 self.display_message("not saving data: not stopping")
 
-    def OnToggleTrackingEnabled(self,event):
+    def OnToggleTrackingEnabled(self, event):
         widget = event.GetEventObject()
         cam_id = self.widget2cam_id[widget]
 
         with self.tracking_enabled_lock:
             self.tracking_enabled[cam_id] = widget.GetValue()
 
-
     def quit(self):
         with self.ufmf_writer_lock:
             for ufmf_writer in self.ufmf_writer.itervalues():
-                ufmf_writer.close() # make sure all data savers close nicely
+                ufmf_writer.close()  # make sure all data savers close nicely
