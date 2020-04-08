@@ -16,6 +16,10 @@ import math
 import motmot.FlyMovieFormat.FlyMovieFormat as FMF
 
 
+def bchr(intval):
+    return bytes(bytearray((intval,)))
+
+
 class UfmfError(Exception):
     pass
 
@@ -124,7 +128,7 @@ def identify_ufmf_version(filename):
     version_buflen = struct.calcsize(VERSION_FMT)
     version_buf = fd.read(version_buflen)
     had_marker = False
-    if version_buf == "ufmf":
+    if version_buf == b"ufmf":
         version_buf = fd.read(version_buflen)
         had_marker = True
     (version,) = struct.unpack(VERSION_FMT, version_buf)
@@ -139,14 +143,18 @@ def identify_ufmf_version(filename):
 
 
 def _write_dict(fd, save_dict):
-    fd.write("d")
-    fd.write(chr(len(save_dict.keys())))
-    keys = save_dict.keys()
+    fd.write(b"d")
+    fd.write(bchr(len(save_dict.keys())))
+    keys = list(save_dict.keys())
     keys.sort()  # keep ordering fixed to file remains same if re-indexed
     for key in keys:
+        if sys.version_info.major <= 2:
+            key_bytes = key
+        else:
+            key_bytes = key.encode()
         value = save_dict[key]
-        b = struct.pack("<H", len(key))
-        b += key
+        b = struct.pack("<H", len(key_bytes))
+        b += key_bytes
         fd.write(b)
         if isinstance(value, dict):
             _write_dict(fd, value)
@@ -155,9 +163,12 @@ def _write_dict(fd, save_dict):
             larr = np.array(value)
             assert larr.ndim == 1
             dtype_char = larr.dtype.char
+            if sys.version_info.major >= 3:
+                dtype_char = dtype_char.encode()
+                assert len(dtype_char) == 1
             bytes_per_element = larr.dtype.itemsize
-            b = "a" + dtype_char + struct.pack("<L", len(larr) * bytes_per_element)
-            b += larr.tostring()
+            b = b"a" + dtype_char + struct.pack("<L", len(larr) * bytes_per_element)
+            b += larr.tobytes()
             fd.write(b)
             continue
         raise ValueError("don't know how to save value %s" % (value,))
@@ -200,7 +211,10 @@ def _read_dict(fd, buf_remaining=None):
         x, buf_remaining = _read_min_chars(fd, Hsize, buf_remaining)
         (keylen,) = struct.unpack("<H", x)
         x, buf_remaining = _read_min_chars(fd, keylen, buf_remaining)
-        key = x
+        if sys.version_info.major <= 2:
+            key = x
+        else:
+            key = x.decode()
         x, buf_remaining = _read_min_chars(fd, 1, buf_remaining)
         id = x
         if id == b"d":
@@ -384,6 +398,7 @@ class UfmfV1(UfmfBase):
     def __del__(self):
         self.close()
 
+
 class _UFmfV3LowLevelReader(object):
     def __init__(self, fd, version):
         self._fd = fd
@@ -402,15 +417,17 @@ class _UFmfV3LowLevelReader(object):
         len_type = ord(self._fd_read(1))
         keyframe_type = self._fd_read(len_type)
         assert len(keyframe_type) == len_type
+        if sys.version_info.major >= 3:
+            keyframe_type = keyframe_type.decode()
         intup = struct.unpack(
             FMT[self._version].KEYFRAME2, self._fd_read(self._keyframe2_sz)
         )
         dtype_char, width, height, timestamp = intup
 
-        if dtype_char == "B":
+        if dtype_char == b"B":
             dtype = np.uint8
             sz = 1
-        elif dtype_char == "f":
+        elif dtype_char == b"f":
             dtype = np.float32
             sz = 4
         else:
@@ -487,7 +504,8 @@ class _UFmfV3Indexer(object):
         result = {"frame": self._index["frame"]}
         # remove defaultdict and convert to dict
         result["keyframe"] = {}
-        for keyframe_type, value in self._index["keyframe"].iteritems():
+        for keyframe_type in self._index["keyframe"]:
+            value = self._index["keyframe"][keyframe_type]
             result["keyframe"][keyframe_type] = value
         return result
 
@@ -645,9 +663,13 @@ class UfmfV3(UfmfBase):
             self._max_height,
             coding_str_len,
         ) = intup
-        assert ufmf_str == "ufmf"
+        assert ufmf_str == b"ufmf"
         assert expected_version == self._version
-        self._coding = self._r._fd_read(coding_str_len)
+        coding_bytes = self._r._fd_read(coding_str_len)
+        if sys.version_info.major <= 2:
+            self._coding = coding_bytes
+        else:
+            self._coding = coding_bytes.decode()
         self._next_frame = 0
         if ignore_preexisting_index:
             index_location = 0
@@ -678,14 +700,14 @@ class UfmfV3(UfmfBase):
                 if self._version == 2 and index_dict_location > 4294967295:
                     raise ValueError("index location will not fit in .ufmf v2 file")
 
-                b = chr(INDEX_DICT_CHUNK)
+                b = bchr(INDEX_DICT_CHUNK)
                 self._fd.write(b)
                 _write_dict(self._fd, self._index)
                 self._fd.truncate()
                 self._fd.seek(0)
                 buf = struct.pack(
                     FMT[self._version].HEADER,
-                    "ufmf",
+                    b"ufmf",
                     self._version,
                     index_dict_location,
                     self._max_width,
@@ -711,7 +733,7 @@ class UfmfV3(UfmfBase):
             id = buf[:1]
             buf = buf[1:]
             try:
-                assert id == "d"  # dictionary
+                assert id == b"d"  # dictionary
 
                 self._index, buf_remaining = _read_dict(self._fd, buf_remaining=buf)
                 if len(buf_remaining) != 0:
@@ -1119,7 +1141,7 @@ class UfmfSaverV1(UfmfSaverBase):
                 self.height,
             )
         )
-        bg_data = bg_frame.tostring()
+        bg_data = bg_frame.tobytes()
         assert len(bg_data) == self.height * self.width
         self.file.write(bg_data)
         self.last_timestamp = self.timestamp0
@@ -1155,11 +1177,11 @@ class UfmfSaverV1(UfmfSaverBase):
             assert xmax - xmin == (2 * self.image_radius)
 
             roi = origframe[ymin:ymax, xmin:xmax]
-            this_str_buf = roi.tostring()
-            this_str_head = struct.pack(FMT[1].SUBHEADER, xmin, ymin)
+            this_buf = roi.tobytes()
+            this_buf_head = struct.pack(FMT[1].SUBHEADER, xmin, ymin)
 
-            str_buf.append(this_str_head + this_str_buf)
-        fullstr = "".join(str_buf)
+            str_buf.append(this_buf_head + this_buf)
+        fullstr = b"".join(str_buf)
         if len(fullstr):
             self.file.write(fullstr)
         self.last_timestamp = timestamp
@@ -1197,14 +1219,18 @@ class UfmfSaverV3(UfmfSaverBase):
         else:
             self.file = open(file, mode="w+b")
             self._file_opened = True
-        self.coding = coding
+        if sys.version_info.major <= 2:
+            coding_bytes = coding
+        else:
+            coding_bytes = coding.encode()
+        self.coding = coding_bytes
         if max_width is None or max_height is None:
             raise ValueError("max_width and max_height must be set")
         self.max_width = max_width
         self.max_height = max_height
         buf = struct.pack(
             FMT[self.version].HEADER,
-            "ufmf",
+            b"ufmf",
             self.version,
             0,
             self.max_width,
@@ -1212,7 +1238,8 @@ class UfmfSaverV3(UfmfSaverBase):
             len(self.coding),
         )
         self.file.write(buf)
-        self.file.write(coding)
+
+        self.file.write(self.coding)
         if xinc_yinc is None:
             if coding == "MONO8":
                 xinc_yinc = (2, 2)
@@ -1232,21 +1259,29 @@ class UfmfSaverV3(UfmfSaverBase):
         self.min_bytes = struct.calcsize(FMT[self.version].POINTS2)
 
     def add_keyframe(self, keyframe_type, image_data, timestamp):
-        assert(not self.is_closed)
+        assert not self.is_closed
         char2 = len(keyframe_type)
         np_image_data = numpy.asarray(image_data)
         if np_image_data.dtype == np.uint8:
-            dtype = "B"
+            dtype = b"B"
             strides1 = 1
         elif np_image_data.dtype == np.float32:
-            dtype = "f"
+            dtype = b"f"
             strides1 = 4
         else:
             raise ValueError("dtype %s not supported" % image_data.dtype)
         assert np_image_data.ndim == 2
         height, width = np_image_data.shape
         assert np_image_data.strides[1] == strides1
-        b = chr(KEYFRAME_CHUNK) + chr(char2) + keyframe_type  # chunkid, len(type), type
+
+        if sys.version_info.major <= 2:
+            keyframe_type_bytes = keyframe_type
+        else:
+            keyframe_type_bytes = keyframe_type.encode()
+
+        b = (
+            bchr(KEYFRAME_CHUNK) + bchr(char2) + keyframe_type_bytes
+        )  # chunkid, len(type), type
         b += struct.pack(FMT[self.version].KEYFRAME2, dtype, width, height, timestamp)
         loc = self.file.tell()
         tmp = self._index["keyframe"][keyframe_type]
@@ -1259,12 +1294,12 @@ class UfmfSaverV3(UfmfSaverBase):
         self.file.write(b)
         # Write actual image data (dealing with strides).
         for i in range(height):
-            tmp_buf = buffer(np_image_data[i, :width])
+            tmp_buf = memoryview(np_image_data[i, :width])
             self.file.write(tmp_buf)
 
     def _add_frame_regions(self, timestamp, regions):
         n_pts = len(regions)
-        b = chr(FRAME_CHUNK) + struct.pack(FMT[self.version].POINTS1, timestamp, n_pts)
+        b = bchr(FRAME_CHUNK) + struct.pack(FMT[self.version].POINTS1, timestamp, n_pts)
         loc = self.file.tell()
         tmp = self._index["frame"]
         if len(tmp) == 0:
@@ -1273,19 +1308,19 @@ class UfmfSaverV3(UfmfSaverBase):
         tmp["timestamp"].append(timestamp)
         tmp["loc"].append(loc)
         self.file.write(b)
-        str_buf = []
+        buf = []
         for region in regions:
             xmin, ymin, roi = region
             h, w = roi.shape
-            this_str_buf = roi.tostring()
-            assert len(this_str_buf) == w * h
-            this_str_head = struct.pack(FMT[self.version].POINTS2, xmin, ymin, w, h)
-            str_buf.append(this_str_head + this_str_buf)
-        fullstr = "".join(str_buf)
+            this_buf = roi.tobytes()
+            assert len(this_buf) == w * h
+            this_buf_head = struct.pack(FMT[self.version].POINTS2, xmin, ymin, w, h)
+            buf.append(this_buf_head + this_buf)
+        fullstr = b"".join(buf)
         self.file.write(fullstr)
 
     def add_frame(self, origframe, timestamp, point_data):
-        assert(not self.is_closed)
+        assert not self.is_closed
         origframe = np.asarray(origframe)
         origframe_h, origframe_w = origframe.shape
         rects = []
@@ -1339,7 +1374,7 @@ class UfmfSaverV3(UfmfSaverBase):
     def close(self):
         if self.is_closed:
             return
-        b = chr(INDEX_DICT_CHUNK)
+        b = bchr(INDEX_DICT_CHUNK)
         self.file.write(b)
         loc = self.file.tell()
         if self.version == 2 and loc > 4294967295:
@@ -1348,7 +1383,7 @@ class UfmfSaverV3(UfmfSaverBase):
         self.file.seek(0)
         buf = struct.pack(
             FMT[self.version].HEADER,
-            "ufmf",
+            b"ufmf",
             self.version,
             loc,
             self.max_width,
