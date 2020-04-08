@@ -29,4 +29,5 @@ setup(
     },
     package_data={"motmot.ufmf": ["*.xrc",]},
     test_suite="nose.collector",
+    install_requires=["numpy", "motmot.FlyMovieFormat"],
 )
