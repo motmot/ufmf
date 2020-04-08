@@ -209,7 +209,6 @@ def _read_dict(fd, buf_remaining=None):
             value, buf_remaining = _read_array(fd, buf_remaining)
         else:
             raise ValueError("don't know how to read value with id %s" % (id,))
-        assert key not in value
         result[key] = value
     return result, buf_remaining
 
