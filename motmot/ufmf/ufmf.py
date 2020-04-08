@@ -378,8 +378,11 @@ class UfmfV1(UfmfBase):
             yield timestamp, regions
 
     def close(self):
+        # it does not hurt to close file when already closed
         self._fd.close()
 
+    def __del__(self):
+        self.close()
 
 class _UFmfV3LowLevelReader(object):
     def __init__(self, fd, version):
@@ -790,6 +793,9 @@ class UfmfV3(UfmfBase):
             self._fd.close()
             self._file_opened = False
 
+    def __del__(self):
+        self.close()
+
 
 class UfmfV2(UfmfV3):
     """class to read .ufmf version 2 files"""
@@ -859,6 +865,9 @@ class FlyMovieEmulator(object):
 
     def close(self):
         self._ufmf.close()
+
+    def __del__(self):
+        self.close()
 
     def get_n_frames(self):
         if isinstance(self._ufmf, UfmfV1):
@@ -1180,6 +1189,7 @@ class UfmfSaverV3(UfmfSaverBase):
         xinc_yinc=None,
     ):
         super(UfmfSaverV3, self).__init__(self._get_interface_version())
+        self.is_closed = False
         if hasattr(file, "write"):
             # file-like object
             self.file = file
@@ -1222,6 +1232,7 @@ class UfmfSaverV3(UfmfSaverBase):
         self.min_bytes = struct.calcsize(FMT[self.version].POINTS2)
 
     def add_keyframe(self, keyframe_type, image_data, timestamp):
+        assert(not self.is_closed)
         char2 = len(keyframe_type)
         np_image_data = numpy.asarray(image_data)
         if np_image_data.dtype == np.uint8:
@@ -1274,6 +1285,7 @@ class UfmfSaverV3(UfmfSaverBase):
         self.file.write(fullstr)
 
     def add_frame(self, origframe, timestamp, point_data):
+        assert(not self.is_closed)
         origframe = np.asarray(origframe)
         origframe_h, origframe_w = origframe.shape
         rects = []
@@ -1325,6 +1337,8 @@ class UfmfSaverV3(UfmfSaverBase):
         return rects
 
     def close(self):
+        if self.is_closed:
+            return
         b = chr(INDEX_DICT_CHUNK)
         self.file.write(b)
         loc = self.file.tell()
@@ -1342,6 +1356,7 @@ class UfmfSaverV3(UfmfSaverBase):
             len(self.coding),
         )
         self.file.write(buf)
+        self.is_closed = True
         if self._file_opened:
             self.file.close()
             self._file_opened = False
