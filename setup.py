@@ -19,7 +19,6 @@ setup(
         "console_scripts": [
             "ufmf2fmf = motmot.ufmf.ufmf2fmf:main",
             "ufmfcat = motmot.ufmf.ufmfcat:main",
-            "playufmf = motmot.ufmf.playufmf:main",
             "fmf2ufmf = motmot.ufmf.fmf2ufmf:main",
             "ufmfstats = motmot.ufmf.ufmfstats:main",
             "ufmf_reindex = motmot.ufmf.reindex:main",
