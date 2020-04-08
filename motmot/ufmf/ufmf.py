@@ -203,9 +203,9 @@ def _read_dict(fd, buf_remaining=None):
         key = x
         x, buf_remaining = _read_min_chars(fd, 1, buf_remaining)
         id = x
-        if id == "d":
+        if id == b"d":
             value, buf_remaining = _read_dict(fd, buf_remaining)
-        elif id == "a":
+        elif id == b"a":
             value, buf_remaining = _read_array(fd, buf_remaining)
         else:
             raise ValueError("don't know how to read value with id %s" % (id,))
