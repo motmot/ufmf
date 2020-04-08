@@ -2,6 +2,7 @@ import pkg_resources
 import motmot.ufmf.ufmf as ufmf
 import numpy
 import tempfile, os
+import warnings
 
 ufmf_versions = [None, 1, 2, 3]  # None = default
 
@@ -58,7 +59,7 @@ def check_a(version):
             assert test_timestamp1 == timestamp1
             us2.close()
         finally:
-            os.unlink(filename)
+            try_unlink(filename)
 
 
 def test_b():
@@ -162,7 +163,7 @@ def check_b(seek_ok, version):
                     assert numpy.allclose(testbuf, bufim)
             us2.close()
         finally:
-            os.unlink(filename)
+            try_unlink(filename)
 
 
 def test_late_keyframe_fmf_emulator():
@@ -207,4 +208,12 @@ def test_late_keyframe_fmf_emulator():
         test_frame, test_timestamp = fmf.get_next_frame()
         fmf.close()
     finally:
+        try_unlink(filename)
+
+
+def try_unlink(filename):
+    """attempt to unlink the file, but do not raise exception if it fails"""
+    try:
         os.unlink(filename)
+    except PermissionError as err:
+        warnings.warn("cannot unlink file {}: {}".format(filename, err))
