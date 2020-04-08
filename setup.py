@@ -9,7 +9,7 @@ with open(path.join(this_directory, "README.md"), encoding="utf-8") as f:
 
 setup(
     name="motmot.ufmf",
-    version="0.4.1",
+    version="0.4.2",
     description="micro-fmf (.ufmf) format library",
     author="Andrew Straw",
     author_email="strawman@astraw.com",
