@@ -185,7 +185,7 @@ def _read_array(fd, buf_remaining):
     (n_bytes,) = struct.unpack("<L", n_bytes_buf)
 
     data_buf, buf_remaining = _read_min_chars(fd, n_bytes, buf_remaining)
-    larr = np.fromstring(data_buf, dtype=dtype_char)
+    larr = np.frombuffer(data_buf, dtype=dtype_char)
     return larr, buf_remaining
 
 
